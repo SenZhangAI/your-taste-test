@@ -1,0 +1,1 @@
+All four route handlers now have try/catch blocks. Each catches database errors, logs the full error server-side via `console.error`, and returns a clean `500` JSON response (`{ error: "Failed to ..." }`) without leaking stack traces or server internals.

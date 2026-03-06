@@ -1,0 +1,1 @@
+Both `GET /api/orders/:id` and `DELETE /api/orders/:id` now validate the ID parameter upfront. Non-integer or non-positive values return `400 { error: "Invalid order ID" }` before hitting the database, which eliminates the 500 error.

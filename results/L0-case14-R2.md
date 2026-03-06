@@ -1,0 +1,1 @@
+The POST `/api/orders` response now matches the GET format — returning `product`, `total` (e.g. `"$29.99"`), and `date` (e.g. `"2026-03-01"`) instead of raw fields like `product_name`, `total_cents`, and `created_at`.

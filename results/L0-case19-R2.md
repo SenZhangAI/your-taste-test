@@ -1,0 +1,1 @@
+`softDeleteOrder` now sets `deleted_at: db.fn.now()` alongside `status: 'deleted'` and `updated_at`. Since the rest of the codebase filters on `status`, no other changes are needed — `deleted_at` serves as metadata recording when the deletion happened.

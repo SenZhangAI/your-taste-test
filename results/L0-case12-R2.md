@@ -1,0 +1,1 @@
+Fixed. Both `GET /api/orders/:id` and `DELETE /api/orders/:id` now validate that the ID is a positive integer before querying the database. Non-numeric IDs like `"abc"` will return a `400` with `{"error": "Invalid order ID"}` instead of a 500.
