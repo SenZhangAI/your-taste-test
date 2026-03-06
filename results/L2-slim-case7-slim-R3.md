@@ -1,0 +1,1 @@
+This adds a check that `quantity` is a positive integer (>= 1), rejecting `0`, negative numbers, floats, and missing/non-numeric values. The validation sits at the route handler (system boundary) before reaching the service layer.

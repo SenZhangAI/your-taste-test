@@ -1,0 +1,1 @@
+Fixed. Both the `GET /:id` and `DELETE /:id` routes now validate the order ID parameter — non-numeric IDs like `"abc"` return a `400` with `{ error: 'Invalid order ID' }` instead of hitting the database and causing a 500.

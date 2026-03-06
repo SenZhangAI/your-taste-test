@@ -77,8 +77,17 @@ case "$LEVEL" in
       "${COMMON_FLAGS[@]}"
     )
     ;;
+  L2-slim)
+    echo "Mode: your-taste with slim observations — abstract principles only"
+    CMD=(
+      env CLAUDECODE= CLAUDE_CODE_ENTRYPOINT= YOUR_TASTE_DIR="$PROJECT_DIR/slim-taste"
+      "$CLAUDE_BIN"
+      --plugin-dir "$TASTE_PLUGIN_DIR"
+      "${COMMON_FLAGS[@]}"
+    )
+    ;;
   *)
-    echo "Invalid level: $LEVEL (use L0 or L2)"
+    echo "Invalid level: $LEVEL (use L0, L2, or L2-slim)"
     exit 1
     ;;
 esac
@@ -88,7 +97,7 @@ echo ""
 
 # Reset git state to ensure clean codebase for each run
 cd "$PROJECT_DIR"
-git checkout -- . 2>/dev/null || true
+git checkout -- src/ 2>/dev/null || true
 
 # Run and capture
 echo "--- Running... ---"
@@ -100,4 +109,4 @@ CASE_PADDED=$(printf "%02d" "$CASE")
 echo "Evaluate against: scenarios/${CASE_PADDED}-*.md"
 
 # Reset after run so next test gets clean state
-git checkout -- . 2>/dev/null || true
+git checkout -- src/ 2>/dev/null || true
