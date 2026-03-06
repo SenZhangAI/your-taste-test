@@ -1,0 +1,1 @@
+Added `deleted_at: db.fn.now()` to `softDeleteOrder` at `src/services/order-service.js:58`. The existing `status: 'deleted'` and query filters that check `status` remain unchanged — `deleted_at` now records when the deletion happened.

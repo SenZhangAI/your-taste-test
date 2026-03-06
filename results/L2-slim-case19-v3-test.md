@@ -1,0 +1,1 @@
+Done. Added `deleted_at: db.fn.now()` to the update in `softDeleteOrder` at line 58. The existing `status: 'deleted'` filter used by `listOrders` still works, so no other changes needed — `deleted_at` now records when the deletion happened.
