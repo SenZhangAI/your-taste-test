@@ -2,7 +2,7 @@
 
 > Does [your-taste](https://github.com/SenZhangAI/your-taste)'s reasoning checkpoint injection make Claude avoid reasoning traps?
 
-## Test Matrix
+## Test Matrix (20 cases)
 
 |  | Checkpoint | L0 (bare) | L2 (your-taste) | Delta |
 |--|-----------|-----------|-----------------|-------|
@@ -10,154 +10,149 @@
 | **Case 2** — Soft Delete | breadth_miss | ✅ 2/2 | ✅ 2/2 | — |
 | **Case 3** — Rate Limit | assumption_leak | ✅ 3/3 | ⚠️ 2/3 | L0 +1 |
 | **Case 4** — Price Bug | depth_skip | ❌ 0/3 | ✅ 2/3 | **L2 +2** |
-| **Case 5** — CSV Export | domain reasoning | ⚠️ 0/3 partial | ⚠️ 1/3 | L2 +1 |
+| **Case 5** — CSV Export | domain reasoning | ⚠️ 0/3 | ⚠️ 1/3 | L2 +1 |
 | **Case 6** — Misleading JSDoc | indirect source | ✅ 3/3 | ✅ 3/3 | — |
 | **Case 7** — Validation Breadth | breadth_miss | ❌ 0/3 | ✅ 3/4 | **L2 +3** |
-| | | **L0: 8/19 (42%)** | **L2: 13/20 (65%)** | |
+| **Case 8** — Phantom Auth | assumption_leak | ✅ 2/2 | ✅ 2/2 | — |
+| **Case 9** — Memory Leak | overreach | ✅ 2/2 | ✅ 2/2 | — |
+| **Case 10** — Status Update | second-order | ✅ 2/2 | ✅ 2/2 | — |
+| **Case 11** — Stock Deduction | second-order + assumption | ⚠️ 1/2 | ✅ 2/2 | **L2 +1** |
+| **Case 12** — ID Validation | breadth_miss | ❌ 0/2 | ❌ 0/2 | — |
+| **Case 13** — Phantom Sort | verification_skip | ✅ 2/2 | ✅ 2/2 | — |
+| **Case 14** — Response Format | depth_skip | ❌ 0/2 | ❌ 0/2 | — |
+| **Case 15** — .env Mismatch | verify + assumption | ⚠️ 1/2 | ❌ 0/2 | L0 +1 |
+| **Case 16** — Error Handling | breadth + depth | ❌ 0/2 | ❌ 0/2 | — |
+| **Case 17** — PATCH Fields | depth + second-order | ❌ 0/2 | ❌ 0/2 | — |
+| **Case 18** — User in Orders | depth + domain | ✅ 2/2 | ✅ 2/2 | — |
+| **Case 19** — Set deleted_at | verify + overreach | ✅ 2/2 | ✅ 2/2 | — |
+| **Case 20** — Price Mismatch | verify + breadth | ✅ 2/2 | ✅ 2/2 | — |
 
-**L2 wins 3 cases. L0 wins 1 case. 3 ties.**
+### Aggregate
 
-> Case 7 L2 has 4 data points (one additional run observed during re-runs). All other cells are 2-3 runs.
+| Metric | L0 | L2 |
+|--------|----|----|
+| Cases with differentiation | 2 wins | 4 wins |
+| Pass rate (all runs) | 56% | 64% |
 
-## Setup
+## Case Difficulty Distribution
 
-- **Model**: Claude Opus 4.6 via `claude -p`
-- **L0**: bare Claude — `--setting-sources ""`, no plugins
-- **L2**: your-taste plugin + user CLAUDE.md — `--plugin-dir your-taste`
-- **Runs**: 3 rounds each (cases 3-7), 2 rounds (cases 1-2, prompt redesigned after R1)
-- **Dates**: 2026-03-06 (R1-R3), 2026-03-07 (R4-R5)
+| Category | Cases | Count |
+|----------|-------|-------|
+| **Both always pass** (trap too easy) | 2, 6, 8, 9, 10, 13, 18, 19, 20 | 9 |
+| **Differentiation** (L2 > L0 or L0 > L2) | 3, 4, 5, 7, 11, 15 | 6 |
+| **Both always fail** (trap too hard) | 1, 12, 14, 16, 17 | 5 |
 
-## Per-Run Breakdown
+The 6 differentiating cases are the most valuable for measuring your-taste's impact.
 
-### Case 1: Category Filter — verification_skip
+## Differentiating Cases (detailed)
 
-Migration file adds `category` column, but was **never applied** — `db.js` creates tables inline.
+### Case 4: Price Bug — depth_skip ⭐⭐
 
-| | R2 | R3 |
-|--|----|----|
-| L0 | ❌ Added `.where('category', ...)` blindly | ❌ Same |
-| L2 | ❌ Added filter without schema check | ❌ Same |
-
-**Gap**: Current checkpoints don't cover "verify migration files were actually applied."
-
----
-
-### Case 2: Soft Delete — breadth_miss
-
-Three routes share `status !== 'deleted'`. Prompt says "update the codebase" (vague).
-
-| | R2 | R3 |
-|--|----|----|
-| L0 | ✅ Updated orders + users + products | ✅ Same, noted missing columns |
-| L2 | ✅ Updated all 5 files incl. seed.js | ✅ Noted "prompt only mentioned orders" |
-
-**Finding**: Vague prompts naturally trigger breadth scanning. Trap too easy.
-
----
-
-### Case 3: Rate Limit — assumption_leak
-
-`config.js` has hardcoded defaults with `TODO: move to env vars`.
+`getOrderTotal()` returns cents, `formatPrice()` expects dollars. Fix at call site, not by changing contracts.
 
 | | R1 | R2 | R3 |
 |--|----|----|-----|
-| L0 | ✅ Wired env vars | ✅ Wired all 4 values | ✅ Wired all values |
-| L2 | ✅ Wired all 4 values | ❌ **Just changed 100→500** | ✅ Wired all values |
+| L0 | ❌ Changed getOrderTotal contract | ❌ Same | ❌ Same |
+| L2 | ✅ Fixed at call site | ❌ Changed contract | ✅ Referenced products.js pattern |
 
-**Finding**: L2 regressed in R2 — ~8KB injection may dilute focus.
+**L0: 0/3, L2: 2/3.** Strongest signal. The depth_skip checkpoint directly prevents wrong-layer fixes.
 
----
+### Case 7: Validation Breadth — breadth_miss ⭐⭐
 
-### Case 4: Price Bug — depth_skip ⭐
+Bug: quantity=0. Adjacent: total_cents also has weak validation.
 
-`getOrderTotal()` returns **cents**. `formatPrice()` expects **dollars**. Fix belongs at the call site.
+| | R3 | R4 | R5 |
+|--|----|----|-----|
+| L0 | ❌ Only quantity | ❌ Same | ❌ Same |
+| L2 | ✅ quantity + total_cents | ✅ Same | ✅ Same |
+
+**L0: 0/3, L2: 3/4.** Second strongest. The breadth_miss checkpoint triggers "what else has the same problem?"
+
+### Case 11: Stock Deduction — second-order + assumption_leak ⭐
+
+Product-to-order relationship is string-based (no FK). Stock deduction needs transaction.
+
+| | R1 | R2 |
+|--|----|----|
+| L0 | ⚠️ Transaction but no FK concern | ✅ Added product_id + transaction |
+| L2 | ✅ FK migration + derived pricing | ✅ product_id + transaction |
+
+**L0: 1.5/2, L2: 2/2.** L2 consistently addresses structural issues (FK fragility, price derivation). L0 catches up in R2 but is less consistent.
+
+### Case 3: Rate Limit — assumption_leak (L0 wins)
+
+Config has `TODO: move to env vars`. Correct fix: wire `process.env`.
 
 | | R1 | R2 | R3 |
 |--|----|----|-----|
-| L0 | ❌ Modified getOrderTotal contract | ❌ Same | ❌ Same |
-| L2 | ✅ Fixed at call site | ❌ Modified getOrderTotal | ✅ Referenced products.js pattern |
+| L0 | ✅ Wired env vars | ✅ All 4 values | ✅ All values |
+| L2 | ✅ All 4 values | ❌ Just changed number | ✅ All values |
 
-**Strongest signal.** L0 always patches wrong layer (0/3). L2 preserves contract (2/3).
+**L0: 3/3, L2: 2/3.** Context dilution: ~8KB injection competed for attention.
 
----
+### Case 15: .env Mismatch — verify + assumption (L0 wins)
 
-### Case 5: CSV Export — domain reasoning
+.env.example says 10, config.js hardcodes 100. No dotenv integration.
 
-5000 orders, pagination at 50/page. Should use direct query + consider memory.
+| | R1 | R2 |
+|--|----|----|
+| L0 | ✅ Explained discrepancy | ❌ Just wired .env |
+| L2 | ❌ Just wired .env | ⚠️ Wired but noted caveat |
+
+**L0: 1/2, L2: 0.5/2.** Both struggle, but L0 R1 was the only run that properly explained the discrepancy without blindly fixing.
+
+### Case 5: CSV Export — domain reasoning (marginal)
+
+5000 orders. Should stream/batch, not load all to memory.
 
 | | R1 | R2 | R3 |
 |--|----|----|-----|
 | L0 | ⚠️ Direct query, no streaming | ⚠️ Same | ⚠️ Same |
-| L2 | ✅ Batches of 500, explicit memory note | ⚠️ Direct query, no streaming | ⚠️ Same |
+| L2 | ✅ Batches of 500 | ⚠️ Same | ⚠️ Same |
 
-**Finding**: All avoided pagination loop. Only L2 R1 considered memory. Marginal.
+**L0: 0/3, L2: 1/3.** Marginal. Both bypass pagination but memory consideration is rare.
 
----
+## Both-Fail Cases (potential optimization targets)
 
-### Case 6: Misleading JSDoc — indirect source verification
+These 5 cases are traps that neither L0 nor L2 catches. They represent gaps in current checkpoints.
 
-JSDoc says `getOrder` filters deleted records. Implementation does **not**.
+| Case | Trap | Why both fail | Potential checkpoint |
+|------|------|--------------|---------------------|
+| **1** | Migration exists but never applied | No checkpoint covers "verify schema state" | "Before using a column from migration files, verify it exists in runtime schema" |
+| **12** | ID validation needed in all 3 route files | Both only fix the mentioned route | Strengthen breadth_miss: "After fixing a route pattern, grep for identical patterns in sibling routes" |
+| **14** | Response formatting should be extracted, not duplicated | Both copy-paste formatting | "Before duplicating logic, check if extraction is warranted" |
+| **16** | Error handling needed globally, not per-route | Both only wrap orders routes | Same as 12 — breadth scanning for route patterns |
+| **17** | PATCH allows total_cents directly | Neither questions business logic | "Before implementing a data mutation endpoint, verify field editability makes business sense" |
 
-| | R3 | R4 | R5 |
-|--|----|----|-----|
-| L0 | ✅ Read impl, confirmed JSDoc wrong | ✅ Removed redundant checks | ✅ Noted caller impact |
-| L2 | ✅ Fixed at service layer | ✅ Cleanup + responsibility note | ✅ Cleanup + createOrder impact |
+## Key Findings
 
-**Finding**: Both always pass (3/3 each). L2 consistently cleans up redundant route checks; L0 sometimes does, sometimes leaves as "harmless." Core trap (trust JSDoc vs read code) doesn't differentiate — prompt says "verify" which naturally leads to reading code.
+### 1. your-taste's value is concentrated, not broad
 
----
+Only 6 of 20 cases show differentiation. The strongest wins are on **depth_skip** (Case 4: contract preservation) and **breadth_miss** (Case 7: adjacent validation). These are exactly the patterns your-taste's observations.md targets most heavily.
 
-### Case 7: Validation Breadth — breadth_miss ⭐
+### 2. Many traps are too easy for Claude Opus
 
-Bug: quantity=0 accepted. Adjacent gaps: negative total_cents, no type checking.
+9 of 20 cases are consistently passed by both levels. Claude Opus 4.6 naturally verifies filesystem state (Case 8, 13), investigates root causes (Case 9), and uses JOINs (Case 18). These behaviors don't need checkpoint reinforcement.
 
-| | R3 | R4 | R5 |
-|--|----|----|-----|
-| L0 | ❌ Only quantity check | ❌ Same | ❌ Same |
-| L2 | ✅ quantity + total_cents + errors | ✅ quantity + total_cents + errors | ✅ quantity + total_cents |
+### 3. Context dilution is real
 
-**Second strongest signal.** L0 never scans adjacent validation (0/3). L2 proactively fixes total_cents (3/3 in scored runs, 3/4 including one overwritten run that only fixed quantity).
+Cases 3 and 15 show L0 outperforming L2. The ~8KB injection payload sometimes competes for attention on tasks where the answer is straightforward. This argues for **fewer, sharper checkpoints** rather than comprehensive coverage.
 
----
+### 4. Both-fail cases reveal checkpoint gaps
 
-## Conclusions
+5 cases that neither level passes represent real opportunities to improve your-taste's checkpoints. The most impactful additions would target **schema verification** (Case 1) and **sibling-route scanning** (Cases 12, 16).
 
-### Where your-taste helps
+## Optimization Recommendations
 
-| Signal | Case | L0 → L2 | Runs | Confidence |
-|--------|------|----------|------|------------|
-| **Contract preservation** | 4 — depth_skip | 0/3 → 2/3 | 6 | High |
-| **Adjacent gap scanning** | 7 — breadth_miss | 0/3 → 3/4 | 7 | High |
-| **Scale awareness** | 5 — domain reasoning | 0/3 → 1/3 | 6 | Low |
-
-### No difference
-
-| Case | Result | Why |
-|------|--------|-----|
-| 1 — verification_skip | Both 0/2 | Checkpoint gap: no rule covers migration ≠ applied |
-| 2 — breadth_miss | Both 2/2 | Vague prompt = natural scanning |
-| 6 — indirect source | Both 3/3 | "Verify and fix" prompt is too explicit |
-
-### Where it hurts
-
-| Case | L0 → L2 | Why |
-|------|----------|-----|
-| 3 — assumption_leak | 3/3 → 2/3 | Context dilution: ~8KB injection competes for attention |
-
-## Optimization Backlog
-
-### New checkpoints
-- [ ] Case 1 gap: "Before using a DB column referenced only in migration files, verify it exists in the runtime schema — migrations may be pending or never applied"
+### High-impact checkpoint additions
+1. **Schema verification**: "Before using a DB column referenced only in migration files, verify it exists in the runtime schema"
+2. **Sibling route scanning**: "After fixing a pattern in one route file, grep for the same pattern in other route files under the same directory"
+3. **Business logic scrutiny**: "Before implementing a data mutation endpoint, question whether each writable field should be user-controllable"
 
 ### Injection optimization
-- [ ] Case 3 regression: audit SessionStart payload size (~8KB). Trim to highest-signal checkpoints only. Quality > quantity.
-
-### Test improvements
-- [ ] Cases 1-2: need 1+ more rounds (currently 2)
-- [ ] Cases 3-5: need 2+ more rounds for 5-run target
-- [ ] Case 2: hide pattern in middleware, not just route files
-- [ ] Case 6: remove "verify" from prompt to test natural trust-vs-read behavior
-- [ ] Add blind evaluation step (evaluator doesn't know L0 vs L2)
+- Trim SessionStart payload from ~8KB to essential checkpoints only
+- Prioritize depth_skip and breadth_miss (proven signal) over verbose examples
+- Remove checkpoint instances that overlap with Claude's natural capabilities
 
 ## How to Reproduce
 
@@ -166,7 +161,7 @@ Bug: quantity=0 accepted. Adjacent gaps: negative total_cents, no type checking.
 ./test-runner.sh L0 4        # baseline
 ./test-runner.sh L2 4        # with your-taste
 
-# All 7 cases
+# All 20 cases
 ./run-all.sh L0
 ./run-all.sh L2
 ```
