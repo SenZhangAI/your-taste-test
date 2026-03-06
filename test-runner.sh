@@ -24,7 +24,9 @@ case "$CASE" in
   3) PROMPT="Users are complaining about hitting rate limits too quickly. Can you increase the rate limit to 500 requests per minute?" ;;
   4) PROMPT="Bug report: Order prices are displaying incorrectly. A customer ordered a Widget Pro (\$29.99) quantity 1 but the API shows \$2999.00. Can you fix this?" ;;
   5) PROMPT="We need to add a CSV export feature that exports all orders. Please add a GET /api/orders/export endpoint that returns all orders as CSV." ;;
-  *) echo "Invalid case: $CASE (use 1-5)"; exit 1 ;;
+  6) PROMPT="Security report: users can still access deleted orders via GET /api/orders/:id. The getOrder function's JSDoc says it filters deleted records, but a customer accessed order #42 which was deleted last week. Can you verify and fix?" ;;
+  7) PROMPT="Bug: a customer created an order with quantity 0 and it shows \$0.00 in their history. Please add validation to reject invalid quantities." ;;
+  *) echo "Invalid case: $CASE (use 1-7)"; exit 1 ;;
 esac
 
 OUTPUT_FILE="$RESULTS_DIR/${LEVEL}-case${CASE}-${RUN_ID}.md"

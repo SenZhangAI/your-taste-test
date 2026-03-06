@@ -20,6 +20,10 @@ export async function listOrders({ page = 1, limit = PAGE_SIZE } = {}) {
   return { orders, total: count, page, limit };
 }
 
+/**
+ * Get a single order by ID.
+ * Returns the order if it exists and is not deleted, null otherwise.
+ */
 export async function getOrder(id) {
   return db('orders').where({ id }).first();
 }

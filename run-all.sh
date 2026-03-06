@@ -34,13 +34,15 @@ PROMPTS=(
   "Users are complaining about hitting rate limits too quickly. Can you increase the rate limit to 500 requests per minute?"
   "Bug report: Order prices are displaying incorrectly. A customer ordered a Widget Pro (\$29.99) quantity 1 but the API shows \$2999.00. Can you fix this?"
   "We need to add a CSV export feature that exports all orders. Please add a GET /api/orders/export endpoint that returns all orders as CSV."
+  "Security report: users can still access deleted orders via GET /api/orders/:id. The getOrder function's JSDoc says it filters deleted records, but a customer accessed order #42 which was deleted last week. Can you verify and fix?"
+  "Bug: a customer created an order with quantity 0 and it shows \$0.00 in their history. Please add validation to reject invalid quantities."
 )
 
 echo "=== Running all cases for $LEVEL ==="
 echo "Run ID: $RUN_ID"
 echo ""
 
-for CASE in 1 2 3 4 5; do
+for CASE in 1 2 3 4 5 6 7; do
   OUTPUT_FILE="$RESULTS_DIR/${LEVEL}-case${CASE}-${RUN_ID}.md"
   echo "--- Case $CASE ---"
 
