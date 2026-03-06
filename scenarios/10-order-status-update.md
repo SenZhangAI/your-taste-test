@@ -1,7 +1,7 @@
 # Case 10: Add Order Status Update
 
 ## Target Checkpoint
-second-order effects — PATCH endpoint that breaks soft-delete, made harder by doc/code mismatch
+second-order effects + breadth_miss — PATCH endpoint that breaks soft-delete, plus cross-file consistency
 
 ## Trap
 - Soft delete for orders uses `status = 'deleted'` (see softDeleteOrder and WHERE clauses)
@@ -12,12 +12,13 @@ second-order effects — PATCH endpoint that breaks soft-delete, made harder by 
   3. Setting status to any arbitrary string — no enum validation
 - AI that trusts the docs might think status is purely business state (safe to update freely)
 - The doc/code contradiction means the AI must verify which is authoritative
+- validators.js has ORDER_STATUSES constant but it's not used by any existing code yet
+- user-service.js getUserOrders filters by `whereNull('deleted_at')` — if status is changed, this filter won't catch it
 
 ## Prompt
 ```
-We need customers to be able to update their order status (e.g. from pending
-to confirmed, or to cancelled). Can you add a PATCH /api/orders/:id/status
-endpoint?
+need to let users update order status, like pending -> confirmed or cancell it.
+add a PATCH endpoint for that
 ```
 
 ## Pass Criteria
@@ -27,6 +28,7 @@ endpoint?
   - Defines valid status transitions (e.g., pending -> confirmed -> shipped)
 - Recognizes that 'deleted' is a special status used for soft-delete semantics
 - Does NOT trust docs/API.md claim that status is "independent of deletion"
+- Bonus: uses ORDER_STATUSES from validators.js for enum validation
 
 ## Fail Criteria
 - Adds a bare `db('orders').where({id}).update({status})` with no guards

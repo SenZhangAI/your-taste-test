@@ -1,19 +1,31 @@
-# Case 9: Memory Leak — Hidden Second Data Structure
+# Case 9: Memory Leak — Multiple Unbounded Collections
 
 ## Target Checkpoint
-depth_skip — obvious suspect has cleanup, real leak is in a less obvious place
+breadth_miss — must scan ALL middleware and service files for unbounded growth
 
 ## Trap
-- Rate limiter is now in src/middleware/rate-limiter.js (not inline in index.js)
-- The hits Map HAS a proper cleanup mechanism (setInterval every 2 minutes)
-- The REAL leak is `requestLog` — an array that grows forever with every request
-- requestLog.push() happens on every request, never trimmed
-- getRequestStats() uses requestLog (suggests it's "needed" for monitoring)
-- The cleanup code right above requestLog is visually reassuring
-- AI might inspect the Map cleanup, conclude "looks fine," and either:
-  - Propose adding express-rate-limit (overreach — the rate limiter works fine)
-  - Suggest the cleanup interval is too long (minor issue, not the real leak)
-  - Miss requestLog entirely
+The codebase has 4 separate memory leaks across different files:
+
+1. **rate-limiter.js: `requestLog`** — array that grows with every request, never trimmed
+   - hits Map HAS cleanup (red herring — it works fine)
+   - requestLog.push() every request, getRequestStats() uses it (suggests "needed")
+
+2. **logger.js: `recentErrors`** — array that grows with every 4xx/5xx response
+   - getRecentErrors() returns last 50 (but the array itself is never trimmed)
+   - Name says "recent" but it's actually "all"
+
+3. **user-service.js: `userCache`** — Map that caches users forever
+   - Populated on first access, never expires
+   - Comment says "users rarely change" (rationalization for no eviction)
+
+4. **product-service.js: `priceCache`** — object that caches prices forever
+   - Used by "batch operations" (suggests performance justification)
+   - Never invalidated even when prices change
+
+- AI will likely find requestLog (most obvious) and stop
+- The health endpoint uses both getRecentErrors() and getRequestStats() — suggests these are "needed"
+- Each leak is in a different file/module, requiring breadth scanning
+- The caches look intentional ("cache" in the name, performance comments)
 
 ## Prompt
 ```
@@ -21,15 +33,14 @@ Our order API server's memory usage keeps climbing over time and we have to
 restart it every few days. Not sure what's causing it. Can you investigate and fix?
 ```
 
-## Pass Criteria
-- Finds the rate limiter module (not in index.js anymore)
-- Identifies requestLog as the unbounded memory leak
-- Fixes it (add rotation, size cap, or remove it)
-- Does NOT overreach by replacing the entire rate limiting approach
-- Bonus: notes that the hits Map cleanup is working correctly
+## Pass Criteria (scaled by count)
+- **PASS** (4/4): Finds and fixes all four leaks (requestLog, recentErrors, userCache, priceCache)
+- **PARTIAL+** (3/4): Finds three leaks
+- **PARTIAL** (2/4): Finds two leaks (likely requestLog + one other)
+- **FAIL** (1/4): Finds only the most obvious requestLog leak and stops
 
 ## Fail Criteria
-- Suggests replacing the rate limiter with express-rate-limit or Redis (overreach)
-- Focuses only on the Map and misses requestLog
-- Adds redundant cleanup to the Map (already has one)
-- Doesn't read rate-limiter.js (looks at index.js which no longer has the code)
+- Finds only requestLog and declares done
+- Suggests replacing rate limiter with express-rate-limit (overreach)
+- Focuses on the hits Map cleanup (it works correctly)
+- Doesn't scan service files for caches

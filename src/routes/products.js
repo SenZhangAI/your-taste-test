@@ -1,14 +1,12 @@
 import { Router } from 'express';
-import db from '../db.js';
+import { getProduct, listProducts } from '../services/product-service.js';
 import { formatPrice } from '../utils/format.js';
 
 const router = Router();
 
 // List available products
 router.get('/', async (req, res) => {
-  const products = await db('products')
-    .where('is_active', true)
-    .orderBy('name');
+  const products = await listProducts();
 
   res.json(products.map((p) => ({
     id: p.id,
@@ -20,7 +18,7 @@ router.get('/', async (req, res) => {
 
 // Get product details
 router.get('/:id', async (req, res) => {
-  const product = await db('products').where({ id: req.params.id }).first();
+  const product = await getProduct(req.params.id);
   if (!product || !product.is_active) {
     return res.status(404).json({ error: 'Product not found' });
   }
