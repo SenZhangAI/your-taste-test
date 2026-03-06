@@ -4,157 +4,117 @@
 
 ## Configuration
 
-| Component | L0 (bare Claude) | L2 (your-taste) |
-|-----------|-------------------|------------------|
+| Component | L0 (bare Claude) | L2-slim (your-taste) |
+|-----------|-------------------|----------------------|
 | CLAUDE.md | None | 6.8K (optimized) |
 | SessionStart hook | None | ~0.5K |
 | UserPromptSubmit hook | None | ~2.5K (abstract checkpoints) |
 | **Total injection** | **0** | **~10K** |
 
-L2 uses abstract reasoning checkpoints with disambiguating examples — no domain-specific content. See [ANALYSIS.md](ANALYSIS.md) for the optimization process that led to this configuration (30K → 10K, +19pp pass rate).
+Codebase: 15+ file Express/Knex order API with service layer, 3 varied soft-delete patterns, 4 memory leaks, deliberate doc/code mismatches.
 
 ## Test Matrix (20 cases)
 
-|  | Checkpoint | L0 (bare) | L2 (your-taste) | Delta |
-|--|-----------|-----------|-----------------|-------|
-| **Case 1** — Category Filter | verification_skip | ❌ 0/2 | ❌ FAIL | — |
-| **Case 2** — Soft Delete | breadth_miss | ✅ 2/2 | ✅ PASS | — |
-| **Case 3** — Rate Limit | assumption_leak | ✅ 3/3 | ✅ PASS | — |
-| **Case 4** — Price Bug | depth_skip | ❌ 0/3 | ✅ PASS | **+L2** |
-| **Case 5** — CSV Export | domain reasoning | ❌ 0/3 | ⚠️ PARTIAL | +L2 |
-| **Case 6** — Misleading JSDoc | indirect source | ✅ 3/3 | ✅ PASS | — |
-| **Case 7** — Validation Breadth | breadth_miss | ❌ 0/3 | ❌ FAIL | — |
-| **Case 8** — Phantom Auth | assumption_leak | ✅ 2/2 | ✅ PASS | — |
-| **Case 9** — Memory Leak | overreach | ✅ 2/2 | ✅ PASS | — |
-| **Case 10** — Status Update | second-order | ✅ 2/2 | ✅ PASS | — |
-| **Case 11** — Stock Deduction | second-order + assumption | ⚠️ 1/2 | ✅ PASS | **+L2** |
-| **Case 12** — ID Validation | breadth_miss | ❌ 0/2 | ✅ PASS | **+L2** |
-| **Case 13** — Phantom Sort | verification_skip | ✅ 2/2 | ✅ PASS | — |
-| **Case 14** — Response Format | depth_skip | ❌ 0/2 | ❌ FAIL | — |
-| **Case 15** — .env Mismatch | verify + assumption | ⚠️ 1/2 | ❌ FAIL | -L0 |
-| **Case 16** — Error Handling | breadth + depth | ❌ 0/2 | ✅ PASS | **+L2** |
-| **Case 17** — PATCH Fields | depth + second-order | ❌ 0/2 | ⚠️ PARTIAL | +L2 |
-| **Case 18** — User in Orders | depth + domain | ✅ 2/2 | ✅ PASS | — |
-| **Case 19** — Set deleted_at | verify + overreach | ✅ 2/2 | ✅ PASS | — |
-| **Case 20** — Price Mismatch | verify + breadth | ✅ 2/2 | ✅ PASS | — |
+### v3 Results (10 stress-tested cases)
 
-### Aggregate
+Source code upgraded with service layer indirection, 4 memory leaks across files, human-like prompts with typos/ambiguity.
 
-| Metric | L0 | L2 |
+|  | Checkpoint | L0 (bare) | L2-slim | Delta |
+|--|-----------|-----------|---------|-------|
+| **Case 2** — Soft Delete Migration | breadth_miss | ⚠️ PARTIAL — missed products `is_active` | ✅ PASS — noted all 3 patterns | **+L2** |
+| **Case 3** — Rate Limit Config | assumption_leak | ✅ PASS — caught env inconsistency | ⚠️ PARTIAL — bumped value but distracted by requestLog | **+L0** |
+| **Case 6** — Misleading JSDoc | verification_skip + breadth | ❌ FAIL — added redundant filter | ❌ FAIL — same, missed user-service.js bug | — |
+| **Case 8** — Auth Never Enforces | assumption_leak | ✅ PASS — found decorative auth | ✅ PASS — same + more detail | — |
+| **Case 9** — Memory Leak (4 leaks) | breadth_miss | ⚠️ PARTIAL 2/4 — requestLog + recentErrors | ⚠️ PARTIAL 2/4 — same + TTL on caches | — |
+| **Case 10** — Order Status Update | second-order | ✅ PASS — blocked 'deleted', validated | ✅ PASS — same, used ORDER_STATUSES | — |
+| **Case 15** — .env vs config.js | verification_skip | ✅ PASS — found hardcoded RATE_LIMIT | ✅ PASS — same + dotenv warning | — |
+| **Case 18** — Add User to Orders | depth_skip | ✅ PASS — used JOIN | ✅ PASS — used JOIN | — |
+| **Case 19** — Set deleted_at | overreach | ✅ PASS — 1-line fix, scoped | ✅ PASS — same | — |
+| **Case 20** — Price Mismatch | verification_skip | ✅ PASS — correctly refused to "fix" | ✅ PASS — same | — |
+
+### v1 Results (10 cases, pre-service-layer codebase)
+
+These cases were tested on the simpler v1 codebase (11 files, no service layer). Results may differ on v3 codebase.
+
+|  | Checkpoint | L0 (bare) | L2-slim | Delta |
+|--|-----------|-----------|---------|-------|
+| **Case 1** — Category Filter | verification_skip | ❌ FAIL | ❌ FAIL | — |
+| **Case 4** — Price Bug | depth_skip | ❌ FAIL | ✅ PASS | **+L2** |
+| **Case 5** — CSV Export | domain reasoning | ❌ FAIL | ⚠️ PARTIAL | +L2 |
+| **Case 7** — Validation Breadth | breadth_miss | ❌ FAIL | ❌ FAIL | — |
+| **Case 11** — Stock Deduction | second-order | ⚠️ PARTIAL | ✅ PASS | **+L2** |
+| **Case 12** — ID Validation | breadth_miss | ❌ FAIL | ✅ PASS | **+L2** |
+| **Case 13** — Phantom Sort | verification_skip | ✅ PASS | ✅ PASS | — |
+| **Case 14** — Response Format | depth_skip | ❌ FAIL | ❌ FAIL | — |
+| **Case 16** — Error Handling | breadth + depth | ❌ FAIL | ✅ PASS | **+L2** |
+| **Case 17** — PATCH Fields | depth + second-order | ❌ FAIL | ⚠️ PARTIAL | +L2 |
+
+### Aggregate (v3 stress tests)
+
+| Metric | L0 | L2-slim |
 |--------|----|----|
-| PASS | 11 | 14 |
+| PASS | 6 | 6 |
 | PARTIAL | 2 | 2 |
-| FAIL | 7 | 4 |
-| **Score** (PASS=1, PARTIAL=0.5) | **12/20 (60%)** | **15/20 (75%)** |
-| Cases where L2 > L0 | — | 5 (Cases 4, 11, 12, 16, 17) |
-| Cases where L0 > L2 | 1 (Case 15) | — |
+| FAIL | 2 | 2 |
+| Cases where L2 > L0 | — | 1 (Case 2) |
+| Cases where L0 > L2 | 1 (Case 3) | — |
 
-## What Changed vs Original L2
+### Aggregate (all 20 cases, v1+v3 combined)
 
-The original L2 used 18K of domain-specific Chinese observations (card processing, Prisma queries, supplier integrations). The optimized L2 uses 3K of abstract English checkpoints with disambiguating examples. Key differences:
-
-| Case | Original L2 | Optimized L2 | Why |
-|------|------------|-------------|-----|
-| **3** Rate Limit | ⚠️ 2/3 | ✅ PASS | Context dilution eliminated (10K vs 30K injection) |
-| **7** Validation | ✅ 3/4 | ❌ FAIL | Lost serendipitous domain example hit (see ANALYSIS.md) |
-| **12** ID Validation | ❌ 0/2 | ✅ PASS | Imperative breadth-scan wording works ("not optional... before considering done") |
-| **16** Error Handling | ❌ 0/2 | ✅ PASS | Same breadth-scan improvement |
-| **17** PATCH Fields | ❌ 0/2 | ⚠️ PARTIAL | New "field editability" checkpoint partially triggers |
-
-Net: +3 cases gained, -1 case lost vs original L2.
-
-## Case Difficulty Distribution
-
-| Category | Cases | Count |
-|----------|-------|-------|
-| **Both pass** (trap too easy for Opus) | 2, 3, 6, 8, 9, 10, 13, 18, 19, 20 | 10 |
-| **L2 wins** (your-taste makes the difference) | 4, 5, 11, 12, 16, 17 | 6 |
-| **Both fail** (beyond checkpoint reach) | 1, 14 | 2 |
-| **L0 wins** (your-taste hurts) | 15 | 1 |
-| **Mixed** (L2 regressed from original) | 7 | 1 |
-
-## Differentiating Cases (detailed)
-
-### Case 4: Price Bug — depth_skip
-
-`getOrderTotal()` returns cents, `formatPrice()` expects dollars. L0 always changes the contract; L2 fixes at the call site.
-
-**L0: 0/3 FAIL. L2: PASS.** The "escalate abstraction level / fix at the right layer" checkpoint directly prevents wrong-layer fixes.
-
-### Case 12: ID Validation — breadth_miss (breakthrough)
-
-Bug in orders route. Adjacent: users and products routes have identical vulnerability.
-
-**L0: 0/2 FAIL. L2: PASS.** The optimized breadth-scan wording — "immediately run a grep... This is not optional... search the entire routes/ directory before considering the task done" — made the AI fix all three route files. The original L2 with suggestive wording ("list and check") also failed this case.
-
-### Case 16: Error Handling — breadth + depth (breakthrough)
-
-Error handling needed globally across all route files, not just orders.
-
-**L0: 0/2 FAIL. L2: PASS.** Added global Express error middleware plus asyncHandler wrapper across all three route files. Same breadth-scan improvement as Case 12.
-
-### Case 11: Stock Deduction — second-order + assumption_leak
-
-Product-to-order relationship is string-based (no FK). Stock deduction needs transaction.
-
-**L0: PARTIAL. L2: PASS.** L2 switched to product_id lookup and wrapped in transaction, addressing FK fragility that L0 only sometimes catches.
-
-### Case 17: PATCH Fields — depth + second-order
-
-Prompt asks to make total_cents directly editable. Correct: question whether computed values should accept direct input.
-
-**L0: 0/2 FAIL. L2: PARTIAL.** L2 restricted to pending orders and whitelisted fields — good. But still accepted total_cents from client while noting "it would be safer to look up the price server-side." Flagged but not enforced.
-
-### Case 15: .env Mismatch — verify + assumption (L0 wins)
-
-.env.example says 10, config.js hardcodes 100, no dotenv. Correct: explain the discrepancy.
-
-**L0: PARTIAL. L2: FAIL.** L2 identified no dotenv but jumped to offering solutions without explaining that .env.example has no runtime effect. This is a knowledge gap — no checkpoint can teach infrastructure mechanics.
+| Metric | L0 | L2-slim |
+|--------|----|----|
+| PASS | 10 | 13 |
+| PARTIAL | 3 | 4 |
+| FAIL | 7 | 3 |
+| **L2 wins** | — | 6 (Cases 2, 4, 5, 11, 12, 16) |
+| **L0 wins** | 1 (Case 3) | — |
 
 ## Key Findings
 
-### 1. Abstract principles + disambiguating examples > domain-specific examples
+### 1. breadth_miss is the only reliable differentiator
 
-10K of well-crafted abstract checkpoints (75% pass) outperform 30K of domain-specific observations (64% pass). Domain examples anchor AI to irrelevant contexts; abstract principles with universal examples (grep, search, enumerate) generalize across codebases. See [ANALYSIS.md](ANALYSIS.md) for the full evidence.
+Opus 4.6 natively handles verification_skip, assumption_leak, overreach, and depth_skip. The only checkpoint type that creates measurable L0/L2 differentiation is breadth_miss — "scan adjacent files after completing the primary fix."
 
-### 2. Imperative wording is critical
+| Checkpoint Type | Opus Native? | Evidence |
+|----------------|-------------|----------|
+| verification_skip | Yes | Cases 8, 15, 20: L0 reads code before trusting docs |
+| assumption_leak | Yes | Cases 3, 8: L0 notices env inconsistencies |
+| overreach | Yes | Cases 19, 20: L0 scopes correctly |
+| depth_skip | Yes | Case 18: L0 uses JOIN instead of N+1 |
+| **breadth_miss** | **No** | Case 2: L0 misses products pattern |
 
-"List all parallel components and check each one" (suggestive) → 0% on Cases 12/16.
-"Immediately run a grep. This is not optional. Before considering the task done." (imperative) → 100%.
+### 2. Checkpoints can hurt (Case 3: +L0)
 
-The AI treats suggestive language as optional advice. Imperative language with explicit completion criteria acts as a gate.
+L2-slim on Case 3 correctly bumped the rate limit but then got sidetracked reporting the `requestLog` memory leak — the breadth_miss checkpoint triggered an adjacent-file scan and found an unrelated issue, **derailing from the user's request**. L0 stayed focused.
 
-### 3. Targeted checkpoints unlock previously impossible cases
+### 3. Hard problems need reasoning chains, not rules
 
-Cases 12 and 16 went from 0% (both L0 and original L2) to PASS with strengthened breadth-scan wording. Case 17 went from 0% to PARTIAL with a new "field editability" checkpoint. Checkpoint quality matters more than quantity.
+Case 6 requires a 3-hop chain: verify the reported bug is false → think "where ELSE are orders queried?" → trace through user-service.js to find the real bug. Neither L0 nor L2 can do this — it's beyond single-checkpoint reach.
 
-### 4. Many traps are beyond checkpoint reach
+### 4. 4-leak breadth test reveals ceiling
 
-Case 1 (unapplied migration) and Case 15 (dotenv mechanics) require infrastructure knowledge that no reasoning scaffold provides. Checkpoints improve *how* AI thinks, not *what* AI knows.
+Case 9 has leaks in rate-limiter.js (requestLog), logger.js (recentErrors), user-service.js (userCache), product-service.js (priceCache). Both L0 and L2 find 2/4 — the "obvious" ones. Both rationalize caches as "bounded by entity count."
 
-### 5. your-taste's value is concentrated, not broad
+### 5. Human-like prompts don't change outcomes
 
-10 of 20 cases are naturally handled by Claude Opus 4.6. The 6 cases where L2 wins are exactly the patterns that checkpoints target: breadth scanning (12, 16), contract preservation (4), second-order effects (11), and field editability (17).
+Making prompts more casual (typos, abbreviations, ambiguity) had no measurable effect. Opus handles informal input well natively.
 
-## Remaining Gaps
+## Implications for your-taste
 
-| Case | Gap | Difficulty |
-|------|-----|-----------|
-| **1** | Migration exists but never applied — need schema verification | Hard (infrastructure knowledge) |
-| **7** | Breadth-scan triggers for route files but not for field validation within an endpoint | Medium (checkpoint refinement) |
-| **14** | Formatting duplication — need "extract before duplicating" checkpoint | Medium |
-| **15** | .env.example has no runtime effect without dotenv | Hard (infrastructure knowledge) |
+1. **breadth_miss is the core value proposition.** Focus checkpoint refinement here.
+2. **Need task-type-aware breadth rules:** bug fix → grep callers; migration → enumerate patterns; memory leak → grep module-level collections.
+3. **Checkpoint over-triggering is a real risk** (Case 3). Simple tasks don't need breadth scanning.
+4. **3-hop reasoning chains** (Case 6) need a different mechanism than single checkpoints.
+5. **~6K injection is the sweet spot.** More adds noise.
 
 ## How to Reproduce
 
 ```bash
 # Single case
-./test-runner.sh L0 4        # baseline
-./test-runner.sh L2-slim 4   # optimized your-taste
+./test-runner.sh L0 9        # baseline
+./test-runner.sh L2-slim 9   # your-taste enabled
 
-# All 20 cases
-./run-all.sh L0
-./run-all.sh L2-slim
+# Results saved to results/
 ```
 
-See [HOW-TO-TEST.md](HOW-TO-TEST.md) for full setup instructions.
+See [ANALYSIS.md](ANALYSIS.md) for the full optimization history (v1 → v3).
