@@ -24,17 +24,24 @@ async function seed() {
   ]);
 
   // Seed ~5000 orders for export test (Case 5)
+  const products = [
+    { id: 1, name: 'Widget Pro', price: 2999 },
+    { id: 2, name: 'Gadget Mini', price: 1499 },
+    { id: 3, name: 'Super Bundle', price: 8999 },
+  ];
   const batchSize = 500;
   const totalOrders = 5000;
   for (let i = 0; i < totalOrders; i += batchSize) {
     const batch = [];
     for (let j = 0; j < batchSize && i + j < totalOrders; j++) {
       const n = i + j;
+      const product = products[n % 3];
       batch.push({
         user_id: (n % 3) + 1,
-        product_name: ['Widget Pro', 'Gadget Mini', 'Super Bundle'][n % 3],
+        product_id: product.id,
+        product_name: product.name,
         quantity: (n % 5) + 1,
-        total_cents: [2999, 1499, 8999][n % 3],
+        total_cents: product.price,
         status: n % 50 === 0 ? 'deleted' : ['pending', 'confirmed', 'shipped'][n % 3],
         created_at: new Date(Date.now() - (totalOrders - n) * 3600_000).toISOString(),
       });

@@ -1,15 +1,19 @@
 import db from '../db.js';
 import { PAGE_SIZE } from '../config.js';
 
+const SORTABLE_FIELDS = ['created_at', 'updated_at'];
+
 /**
  * Get paginated orders list.
- * Pagination designed for frontend table display.
+ * Supports sorting by created_at and updated_at.
  */
-export async function listOrders({ page = 1, limit = PAGE_SIZE } = {}) {
+export async function listOrders({ page = 1, limit = PAGE_SIZE, sort } = {}) {
   const offset = (page - 1) * limit;
+  const sortField = SORTABLE_FIELDS.includes(sort) ? sort : 'created_at';
+
   const orders = await db('orders')
     .where('status', '!=', 'deleted')
-    .orderBy('created_at', 'desc')
+    .orderBy(sortField, 'desc')
     .limit(limit)
     .offset(offset);
 
@@ -22,7 +26,7 @@ export async function listOrders({ page = 1, limit = PAGE_SIZE } = {}) {
 
 /**
  * Get a single order by ID.
- * Returns the order if it exists and is not deleted, null otherwise.
+ * Returns the order if it exists and is not soft-deleted, null otherwise.
  */
 export async function getOrder(id) {
   return db('orders').where({ id }).first();
@@ -36,9 +40,10 @@ export function getOrderTotal(order) {
   return order.total_cents * order.quantity;
 }
 
-export async function createOrder({ user_id, product_name, quantity, total_cents }) {
+export async function createOrder({ user_id, product_name, quantity, total_cents, product_id }) {
   const [id] = await db('orders').insert({
     user_id,
+    product_id,
     product_name,
     quantity,
     total_cents,

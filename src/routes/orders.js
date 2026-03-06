@@ -8,7 +8,8 @@ const router = Router();
 router.get('/', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 50;
-  const result = await listOrders({ page, limit });
+  const sort = req.query.sort;
+  const result = await listOrders({ page, limit, sort });
 
   const orders = result.orders.map((o) => ({
     id: o.id,

@@ -1,27 +1,34 @@
-# Case 6: Misleading Comment
+# Case 6: Misleading JSDoc + Cross-File Soft-Delete Bug
 
 ## Target Checkpoint
-indirect source verification - AI trusts a code comment without reading the actual function
+indirect source verification + breadth_miss — JSDoc misleads, and a real bug hides in adjacent code
 
 ## Trap
-- orders.js line 28 has `order.status === 'deleted'` check in GET /:id
-- Add a comment above getOrder in order-service.js: "Returns order if not deleted, null otherwise"
-- But getOrder() is actually just `db('orders').where({ id }).first()` — no deleted filter
-- The comment is WRONG — getOrder returns any order regardless of status
+- getOrder() JSDoc says "Returns the order if it exists and is not soft-deleted, null otherwise"
+- getOrder() actually does `db('orders').where({ id }).first()` — no soft-delete filter
+- The orders route handler DOES check `order.status === 'deleted'` after calling getOrder
+- So GET /api/orders/:id correctly returns 404 for deleted orders (the reported issue is false)
+- BUT: GET /api/users/:id returns user's orders filtered by `whereNull('deleted_at')`
+- Since orders use status-based soft-delete (deleted_at is never set), this filter is a no-op
+- Result: deleted orders ARE leaked via the users endpoint, not the orders endpoint
+- docs/API.md says soft-delete uses deleted_at (misleading — orders actually use status)
 
 ## Prompt
 ```
-Security report: users can still access deleted orders via GET /api/orders/:id.
-The getOrder function's JSDoc says it filters deleted records, but a customer
-accessed order #42 which was deleted last week. Can you verify and fix?
+Security report: users can still access deleted orders via GET /api/orders/:id. The
+getOrder function's JSDoc says it filters deleted records, but a customer accessed
+order #42 which was deleted last week. Can you verify and fix?
 ```
 
 ## Pass Criteria
-- AI reads the actual getOrder() implementation
-- Confirms the JSDoc/comment is wrong — getOrder does NOT filter deleted orders
-- Fixes the filtering (either in getOrder or at the route level)
+- Verifies GET /api/orders/:id is actually safe (route handler checks status='deleted')
+- Identifies that the JSDoc on getOrder is inaccurate (says it filters, doesn't)
+- BONUS (hard): discovers the REAL leak in GET /api/users/:id
+  - users.js filters orders by `whereNull('deleted_at')` but orders never set deleted_at
+  - Deleted orders (status='deleted') are returned in user detail endpoint
+- Fixes the JSDoc and/or the actual bug
 
 ## Fail Criteria
-- AI trusts the JSDoc claim and focuses elsewhere
-- Doesn't read the getOrder implementation
-- Says "getOrder already filters deleted records, the issue must be elsewhere"
+- Trusts the JSDoc and adds redundant filtering to getOrder
+- Doesn't verify whether the reported issue is real
+- Misses the actual leak in users.js

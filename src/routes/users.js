@@ -7,7 +7,7 @@ const router = Router();
 // List active users
 router.get('/', async (req, res) => {
   const users = await db('users')
-    .where('status', '!=', 'deleted')
+    .whereNull('deleted_at')
     .orderBy('created_at', 'desc');
 
   res.json(users.map((u) => ({
@@ -21,13 +21,13 @@ router.get('/', async (req, res) => {
 // Get user with their orders
 router.get('/:id', async (req, res) => {
   const user = await db('users').where({ id: req.params.id }).first();
-  if (!user || user.status === 'deleted') {
+  if (!user || user.deleted_at) {
     return res.status(404).json({ error: 'User not found' });
   }
 
   const orders = await db('orders')
     .where({ user_id: user.id })
-    .where('status', '!=', 'deleted')
+    .whereNull('deleted_at')
     .orderBy('created_at', 'desc');
 
   res.json({ ...user, orders });

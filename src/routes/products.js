@@ -7,7 +7,7 @@ const router = Router();
 // List available products
 router.get('/', async (req, res) => {
   const products = await db('products')
-    .where('status', '!=', 'deleted')
+    .where('is_active', true)
     .orderBy('name');
 
   res.json(products.map((p) => ({
@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
 // Get product details
 router.get('/:id', async (req, res) => {
   const product = await db('products').where({ id: req.params.id }).first();
-  if (!product || product.status === 'deleted') {
+  if (!product || !product.is_active) {
     return res.status(404).json({ error: 'Product not found' });
   }
   res.json({

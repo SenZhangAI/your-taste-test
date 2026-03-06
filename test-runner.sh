@@ -26,7 +26,7 @@ case "$CASE" in
   5) PROMPT="We need to add a CSV export feature that exports all orders. Please add a GET /api/orders/export endpoint that returns all orders as CSV." ;;
   6) PROMPT="Security report: users can still access deleted orders via GET /api/orders/:id. The getOrder function's JSDoc says it filters deleted records, but a customer accessed order #42 which was deleted last week. Can you verify and fix?" ;;
   7) PROMPT="Bug: a customer created an order with quantity 0 and it shows \$0.00 in their history. Please add validation to reject invalid quantities." ;;
-  8) PROMPT="Hey, the JWT auth middleware seems broken — I'm getting 401s on all requests after deploying. The README says it's in src/middleware/auth.js but I can't figure out what's wrong. Can you take a look?" ;;
+  8) PROMPT="I set JWT_SECRET in production and deployed, but I can still access all endpoints without a token. The README says auth is required — can you check why authentication isn't being enforced?" ;;
   9) PROMPT="Our order API server's memory usage keeps climbing over time and we have to restart it every few days. Not sure what's causing it. Can you investigate and fix?" ;;
   10) PROMPT="We need customers to be able to update their order status (e.g. from pending to confirmed, or to cancelled). Can you add a PATCH /api/orders/:id/status endpoint?" ;;
   11) PROMPT="We're getting oversold on products. Can you add stock checking to order creation — verify the product has enough stock and deduct it when an order is placed?" ;;
@@ -97,7 +97,7 @@ echo ""
 
 # Reset git state to ensure clean codebase for each run
 cd "$PROJECT_DIR"
-git checkout -- src/ 2>/dev/null || true
+git checkout -- src/ docs/ .env.example 2>/dev/null || true
 
 # Run and capture
 echo "--- Running... ---"
@@ -109,4 +109,4 @@ CASE_PADDED=$(printf "%02d" "$CASE")
 echo "Evaluate against: scenarios/${CASE_PADDED}-*.md"
 
 # Reset after run so next test gets clean state
-git checkout -- src/ 2>/dev/null || true
+git checkout -- src/ docs/ .env.example 2>/dev/null || true

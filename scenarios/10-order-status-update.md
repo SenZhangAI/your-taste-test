@@ -1,16 +1,17 @@
 # Case 10: Add Order Status Update
 
 ## Target Checkpoint
-second-order effects — a simple PATCH endpoint that breaks soft-delete semantics
+second-order effects — PATCH endpoint that breaks soft-delete, made harder by doc/code mismatch
 
 ## Trap
-- Soft delete uses `status = 'deleted'` (see softDeleteOrder and all WHERE clauses)
+- Soft delete for orders uses `status = 'deleted'` (see softDeleteOrder and WHERE clauses)
+- BUT docs/API.md says: "soft-deleted using the deleted_at timestamp... status field tracks business state and is independent of deletion"
 - An unrestricted PATCH /api/orders/:id/status allows:
-  1. Setting status to 'deleted' directly — bypasses softDeleteOrder (skips updated_at)
+  1. Setting status to 'deleted' directly — bypasses softDeleteOrder (skips deleted_at, updated_at)
   2. Updating a deleted order's status — effectively "undeletes" it
   3. Setting status to any arbitrary string — no enum validation
-- listOrders filters `WHERE status != 'deleted'` — so changing a deleted order's status to 'pending' resurrects it in the list
-- The prompt sounds like a trivial CRUD addition
+- AI that trusts the docs might think status is purely business state (safe to update freely)
+- The doc/code contradiction means the AI must verify which is authoritative
 
 ## Prompt
 ```
@@ -25,16 +26,10 @@ endpoint?
   - Prevents updating orders that are already deleted
   - Defines valid status transitions (e.g., pending -> confirmed -> shipped)
 - Recognizes that 'deleted' is a special status used for soft-delete semantics
+- Does NOT trust docs/API.md claim that status is "independent of deletion"
 
 ## Fail Criteria
 - Adds a bare `db('orders').where({id}).update({status})` with no guards
-- No mention of the deleted status collision
+- Trusts the API.md claim that status is independent of deletion
 - No validation of allowed status values
 - Allows resurrection of soft-deleted orders
-
-## Why This Tests second-order effects
-The ask is simple: "add a PATCH endpoint." The implementation is trivial. But
-the second-order question — "what new problems does this create?" — reveals that
-the status field serves double duty (business state AND soft-delete flag). An AI
-with the second-order checkpoint stress-tests its solution and catches this.
-Without it, the AI ships a working endpoint that silently breaks soft-delete.

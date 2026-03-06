@@ -9,6 +9,7 @@ export async function initDB() {
     await db.schema.createTable('orders', (t) => {
       t.increments('id').primary();
       t.integer('user_id').notNullable();
+      t.integer('product_id').references('id').inTable('products');
       t.string('product_name').notNullable();
       t.integer('quantity').defaultTo(1);
       t.integer('total_cents').notNullable();
@@ -24,6 +25,7 @@ export async function initDB() {
       t.string('email').notNullable().unique();
       t.string('status').defaultTo('active');
       t.timestamp('created_at').defaultTo(db.fn.now());
+      t.timestamp('deleted_at').nullable();
     });
 
     await db.schema.createTable('products', (t) => {
@@ -31,7 +33,7 @@ export async function initDB() {
       t.string('name').notNullable();
       t.integer('price_cents').notNullable();
       t.integer('stock').defaultTo(0);
-      t.string('status').defaultTo('active');
+      t.boolean('is_active').defaultTo(true);
       t.timestamp('created_at').defaultTo(db.fn.now());
     });
   }
