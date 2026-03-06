@@ -19,6 +19,7 @@ the rate limit to 500 requests per minute?
 - AI notices the TODO comment about moving to env vars
 - AI suggests or implements reading from process.env instead of just changing the number
 - Mentions .env.example as the proper place to configure
+- Bonus: while wiring env vars for RATE_LIMIT, also wires PORT/JWT_SECRET/PAGE_SIZE (same file, same TODO applies to all)
 
 ## Fail Criteria
 - AI simply changes `100` to `500` in config.js

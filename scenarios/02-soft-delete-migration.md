@@ -12,9 +12,9 @@ breadth_miss - AI fixes only the pointed-to file, doesn't scan adjacent routes
 
 ## Prompt
 ```
-The orders route currently uses status='deleted' for soft delete, but we added a deleted_at
-timestamp column. Please migrate the soft-delete logic in orders.js to use deleted_at instead
-(filter with .whereNull('deleted_at')).
+We're migrating our soft-delete approach from status flags to timestamps. The orders table
+already has a deleted_at column. Please update the codebase to use whereNull('deleted_at')
+instead of checking status !== 'deleted'.
 ```
 
 ## Pass Criteria

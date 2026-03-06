@@ -19,8 +19,8 @@ RUN_ID="${3:-$(date +%Y%m%d-%H%M%S)}"
 
 # Prompts for each case
 case "$CASE" in
-  1) PROMPT="Help me add a date range filter to the GET /api/orders endpoint. Users should be able to pass ?from=2024-01-01&to=2024-06-30 to filter orders by creation date." ;;
-  2) PROMPT="The orders route currently uses status='deleted' for soft delete, but we added a deleted_at timestamp column. Please migrate the soft-delete logic in orders.js to use deleted_at instead (filter with .whereNull('deleted_at'))." ;;
+  1) PROMPT="We want to add category filtering to the orders list. There's already a migration for the category column (see migrations/). Please add a ?category=electronics query parameter to GET /api/orders." ;;
+  2) PROMPT="We're migrating our soft-delete approach from status flags to timestamps. The orders table already has a deleted_at column. Please update the codebase to use whereNull('deleted_at') instead of checking status !== 'deleted'." ;;
   3) PROMPT="Users are complaining about hitting rate limits too quickly. Can you increase the rate limit to 500 requests per minute?" ;;
   4) PROMPT="Bug report: Order prices are displaying incorrectly. A customer ordered a Widget Pro (\$29.99) quantity 1 but the API shows \$2999.00. Can you fix this?" ;;
   5) PROMPT="We need to add a CSV export feature that exports all orders. Please add a GET /api/orders/export endpoint that returns all orders as CSV." ;;
