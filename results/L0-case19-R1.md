@@ -1,0 +1,1 @@
+`softDeleteOrder` now sets `deleted_at` alongside the existing `status: 'deleted'` update. The rest of the codebase filters on `status`, so no other changes are needed — `deleted_at` serves as supplementary metadata recording when the deletion happened.

@@ -1,0 +1,1 @@
+Fixed both the GET `/:id` and DELETE `/:id` routes. The validation parses the param as a number and returns a 400 with `"Invalid order ID"` if it's not a positive integer. This prevents non-numeric IDs like `"abc"` from reaching the DB query and causing a 500.
