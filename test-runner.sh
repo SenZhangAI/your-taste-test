@@ -1,8 +1,9 @@
 #!/bin/bash
 # your-taste A/B test runner
-# Usage: ./test-runner.sh <L0|L2> <1-20> [run_id]
-# L0 = bare Claude (no your-taste, no user CLAUDE.md)
-# L2 = your-taste fully enabled (plugin + hooks + user CLAUDE.md)
+# Usage: ./test-runner.sh <L0|L1|L2> <1-20> [run_id]
+# L0 = bare Claude (no CLAUDE.md, no plugin)
+# L1 = standalone CLAUDE.md (exported by taste:export, no plugin)
+# L2 = full plugin (dynamic hooks + user CLAUDE.md)
 
 set -euo pipefail
 
@@ -13,8 +14,8 @@ TASTE_PLUGIN_DIR="/Users/sen/ai/your-taste"
 
 mkdir -p "$RESULTS_DIR"
 
-LEVEL="${1:?Usage: ./test-runner.sh <L0|L2> <1-20> [run_id]}"
-CASE="${2:?Usage: ./test-runner.sh <L0|L2> <1-20> [run_id]}"
+LEVEL="${1:?Usage: ./test-runner.sh <L0|L1|L2> <1-20> [run_id]}"
+CASE="${2:?Usage: ./test-runner.sh <L0|L1|L2> <1-20> [run_id]}"
 RUN_ID="${3:-$(date +%Y%m%d-%H%M%S)}"
 
 # Prompts for each case
@@ -58,9 +59,11 @@ COMMON_FLAGS=(
   --permission-mode bypassPermissions
 )
 
+STANDALONE_CLAUDE_MD="${HOME}/.your-taste/standalone-CLAUDE.md"
+
 case "$LEVEL" in
   L0)
-    echo "Mode: Bare Claude — no your-taste, no user CLAUDE.md"
+    echo "Mode: Bare Claude — no CLAUDE.md, no plugin"
     CMD=(
       env CLAUDECODE= CLAUDE_CODE_ENTRYPOINT=
       "$CLAUDE_BIN"
@@ -68,8 +71,29 @@ case "$LEVEL" in
       "${COMMON_FLAGS[@]}"
     )
     ;;
+  L1)
+    echo "Mode: Standalone CLAUDE.md — no plugin"
+    # Copy standalone CLAUDE.md to project dir temporarily
+    if [ ! -f "$STANDALONE_CLAUDE_MD" ]; then
+      echo "Error: $STANDALONE_CLAUDE_MD not found. Run: node $TASTE_PLUGIN_DIR/bin/cli.js export"
+      exit 1
+    fi
+    # Append standalone to existing project CLAUDE.md (more realistic — real users add to existing)
+    if [ -f "$PROJECT_DIR/CLAUDE.md" ]; then
+      printf '\n\n' >> "$PROJECT_DIR/CLAUDE.md"
+      cat "$STANDALONE_CLAUDE_MD" >> "$PROJECT_DIR/CLAUDE.md"
+    else
+      cp "$STANDALONE_CLAUDE_MD" "$PROJECT_DIR/CLAUDE.md"
+    fi
+    CMD=(
+      env CLAUDECODE= CLAUDE_CODE_ENTRYPOINT=
+      "$CLAUDE_BIN"
+      --setting-sources "project"
+      "${COMMON_FLAGS[@]}"
+    )
+    ;;
   L2)
-    echo "Mode: your-taste fully enabled — plugin + hooks + user CLAUDE.md"
+    echo "Mode: Full plugin — dynamic hooks + user CLAUDE.md"
     CMD=(
       env CLAUDECODE= CLAUDE_CODE_ENTRYPOINT=
       "$CLAUDE_BIN"
@@ -77,17 +101,8 @@ case "$LEVEL" in
       "${COMMON_FLAGS[@]}"
     )
     ;;
-  L2-slim)
-    echo "Mode: your-taste with slim observations — abstract principles only"
-    CMD=(
-      env CLAUDECODE= CLAUDE_CODE_ENTRYPOINT= YOUR_TASTE_DIR="$PROJECT_DIR/slim-taste"
-      "$CLAUDE_BIN"
-      --plugin-dir "$TASTE_PLUGIN_DIR"
-      "${COMMON_FLAGS[@]}"
-    )
-    ;;
   *)
-    echo "Invalid level: $LEVEL (use L0, L2, or L2-slim)"
+    echo "Invalid level: $LEVEL (use L0, L1, or L2)"
     exit 1
     ;;
 esac
@@ -97,7 +112,7 @@ echo ""
 
 # Reset git state to ensure clean codebase for each run
 cd "$PROJECT_DIR"
-git checkout -- src/ docs/ .env.example 2>/dev/null || true
+git checkout -- src/ docs/ .env.example CLAUDE.md 2>/dev/null || true
 
 # Run and capture
 echo "--- Running... ---"
@@ -109,4 +124,6 @@ CASE_PADDED=$(printf "%02d" "$CASE")
 echo "Evaluate against: scenarios/${CASE_PADDED}-*.md"
 
 # Reset after run so next test gets clean state
-git checkout -- src/ docs/ .env.example 2>/dev/null || true
+git checkout -- src/ docs/ .env.example CLAUDE.md 2>/dev/null || true
+# Remove standalone CLAUDE.md if L1 copied it
+[ "$LEVEL" = "L1" ] && rm -f "$PROJECT_DIR/CLAUDE.md"
