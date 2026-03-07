@@ -1,0 +1,1 @@
+Done. `GET /api/orders?category=electronics` now filters by the `category` column. The filter is applied to both the results query and the count query so pagination stays accurate. When `category` is omitted, behavior is unchanged.

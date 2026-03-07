@@ -1,9 +1,11 @@
 #!/bin/bash
 # your-taste A/B test runner
-# Usage: ./test-runner.sh <L0|L1|L2> <1-20> [run_id]
-# L0 = bare Claude (no CLAUDE.md, no plugin)
-# L1 = standalone CLAUDE.md (exported by taste:export, no plugin)
-# L2 = full plugin (dynamic hooks + user CLAUDE.md)
+# Usage: ./test-runner.sh <level> <1-20> [run_id]
+# L0      = bare Claude (no CLAUDE.md, no plugin, default effort)
+# L0-deep = bare Claude + --effort high (extended thinking)
+# L1      = standalone CLAUDE.md (exported by taste:export, no plugin)
+# L2      = full plugin (dynamic hooks + user CLAUDE.md)
+# L2-deep = full plugin + --effort high
 
 set -euo pipefail
 
@@ -14,9 +16,11 @@ TASTE_PLUGIN_DIR="/Users/sen/ai/your-taste"
 
 mkdir -p "$RESULTS_DIR"
 
-LEVEL="${1:?Usage: ./test-runner.sh <L0|L1|L2> <1-20> [run_id]}"
-CASE="${2:?Usage: ./test-runner.sh <L0|L1|L2> <1-20> [run_id]}"
+LEVEL="${1:?Usage: ./test-runner.sh <L0|L0-deep|L1|L2|L2-deep> <1-20> [run_id] [work_dir]}"
+CASE="${2:?Usage: ./test-runner.sh <L0|L0-deep|L1|L2|L2-deep> <1-20> [run_id] [work_dir]}"
 RUN_ID="${3:-$(date +%Y%m%d-%H%M%S)}"
+WORK_DIR="${4:-}"
+START_SECONDS=$SECONDS
 
 # Prompts for each case
 case "$CASE" in
@@ -71,19 +75,29 @@ case "$LEVEL" in
       "${COMMON_FLAGS[@]}"
     )
     ;;
+  L0-deep)
+    echo "Mode: Bare Claude + extended thinking (--effort high)"
+    CMD=(
+      env CLAUDECODE= CLAUDE_CODE_ENTRYPOINT=
+      "$CLAUDE_BIN"
+      --setting-sources ""
+      --effort high
+      "${COMMON_FLAGS[@]}"
+    )
+    ;;
   L1)
     echo "Mode: Standalone CLAUDE.md — no plugin"
-    # Copy standalone CLAUDE.md to project dir temporarily
     if [ ! -f "$STANDALONE_CLAUDE_MD" ]; then
       echo "Error: $STANDALONE_CLAUDE_MD not found. Run: node $TASTE_PLUGIN_DIR/bin/cli.js export"
       exit 1
     fi
-    # Append standalone to existing project CLAUDE.md (more realistic — real users add to existing)
-    if [ -f "$PROJECT_DIR/CLAUDE.md" ]; then
-      printf '\n\n' >> "$PROJECT_DIR/CLAUDE.md"
-      cat "$STANDALONE_CLAUDE_MD" >> "$PROJECT_DIR/CLAUDE.md"
+    # Append standalone to project CLAUDE.md (use WORK_DIR if provided)
+    L1_TARGET_DIR="${WORK_DIR:-$PROJECT_DIR}"
+    if [ -f "$L1_TARGET_DIR/CLAUDE.md" ]; then
+      printf '\n\n' >> "$L1_TARGET_DIR/CLAUDE.md"
+      cat "$STANDALONE_CLAUDE_MD" >> "$L1_TARGET_DIR/CLAUDE.md"
     else
-      cp "$STANDALONE_CLAUDE_MD" "$PROJECT_DIR/CLAUDE.md"
+      cp "$STANDALONE_CLAUDE_MD" "$L1_TARGET_DIR/CLAUDE.md"
     fi
     CMD=(
       env CLAUDECODE= CLAUDE_CODE_ENTRYPOINT=
@@ -101,8 +115,18 @@ case "$LEVEL" in
       "${COMMON_FLAGS[@]}"
     )
     ;;
+  L2-deep)
+    echo "Mode: Full plugin + extended thinking (--effort high)"
+    CMD=(
+      env CLAUDECODE= CLAUDE_CODE_ENTRYPOINT=
+      "$CLAUDE_BIN"
+      --plugin-dir "$TASTE_PLUGIN_DIR"
+      --effort high
+      "${COMMON_FLAGS[@]}"
+    )
+    ;;
   *)
-    echo "Invalid level: $LEVEL (use L0, L1, or L2)"
+    echo "Invalid level: $LEVEL (use L0, L0-deep, L1, L2, or L2-deep)"
     exit 1
     ;;
 esac
@@ -110,20 +134,27 @@ esac
 echo "Command: ${CMD[*]} \"<prompt>\""
 echo ""
 
-# Reset git state to ensure clean codebase for each run
-cd "$PROJECT_DIR"
-git checkout -- src/ docs/ .env.example CLAUDE.md 2>/dev/null || true
+# If WORK_DIR provided, run there (caller handles isolation/cleanup)
+# Otherwise reset git state for clean codebase
+if [ -n "$WORK_DIR" ]; then
+  cd "$WORK_DIR"
+else
+  cd "$PROJECT_DIR"
+  git checkout -- src/ docs/ .env.example CLAUDE.md 2>/dev/null || true
+fi
 
 # Run and capture (claude may exit non-zero, that's OK)
 echo "--- Running... ---"
 "${CMD[@]}" "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || true
 
+ELAPSED=$(( SECONDS - START_SECONDS ))
 echo ""
-echo "=== Saved to $OUTPUT_FILE ==="
+echo "=== Saved to $OUTPUT_FILE (${ELAPSED}s) ==="
 CASE_PADDED=$(printf "%02d" "$CASE")
 echo "Evaluate against: scenarios/${CASE_PADDED}-*.md"
 
-# Reset after run so next test gets clean state
-git checkout -- src/ docs/ .env.example CLAUDE.md 2>/dev/null || true
-# Remove standalone CLAUDE.md if L1 copied it
-[ "$LEVEL" = "L1" ] && rm -f "$PROJECT_DIR/CLAUDE.md" || true
+# Reset after run (skip if using isolated WORK_DIR — caller handles cleanup)
+if [ -z "$WORK_DIR" ]; then
+  git checkout -- src/ docs/ .env.example CLAUDE.md 2>/dev/null || true
+  [ "$LEVEL" = "L1" ] && rm -f "$PROJECT_DIR/CLAUDE.md" || true
+fi
