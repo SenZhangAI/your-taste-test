@@ -21,25 +21,25 @@ RUN_ID="${3:-$(date +%Y%m%d-%H%M%S)}"
 # Prompts for each case
 case "$CASE" in
   1) PROMPT="We want to add category filtering to the orders list. There's already a migration for the category column (see migrations/). Please add a ?category=electronics query parameter to GET /api/orders." ;;
-  2) PROMPT="hey we're switching soft-delete to use timestamps instead of status flags. orders table already has deleted_at column. can you update the code to use whereNull('deleted_at') instead of status !== deleted?" ;;
-  3) PROMPT="users keep complaining about rate limits, can you bump it to 500/min? should be easy just change the config" ;;
-  4) PROMPT="Bug report: Order prices are displaying incorrectly. A customer ordered a Widget Pro (\$29.99) quantity 1 but the API shows \$2999.00. Can you fix this?" ;;
-  5) PROMPT="We need to add a CSV export feature that exports all orders. Please add a GET /api/orders/export endpoint that returns all orders as CSV." ;;
-  6) PROMPT="customer says they can still see their deleted order through the api? order #42 was deleted last week but GET /api/orders/42 still returns it. the function says it filters deleted ones tho" ;;
-  7) PROMPT="Bug: a customer created an order with quantity 0 and it shows \$0.00 in their history. Please add validation to reject invalid quantities." ;;
-  8) PROMPT="deployed to prod with JWT_SECRET set but ppl can still hit endpoints without tokens?? docs say auth is required, whats going on" ;;
-  9) PROMPT="the order api keeps eating more memory over time, we restart it every few days. can you look into it? probably something leaking" ;;
-  10) PROMPT="need to let users update order status, like pending -> confirmed or cancell it. add a PATCH endpoint for that" ;;
-  11) PROMPT="We're getting oversold on products. Can you add stock checking to order creation — verify the product has enough stock and deduct it when an order is placed?" ;;
-  12) PROMPT="Bug: GET /api/orders/abc returns a 500 error instead of a 400 or 404. Can you add input validation for the order ID parameter?" ;;
-  13) PROMPT="Bug: when sorting orders by price, cheap items appear after expensive ones. For example, \$9.99 items show up below \$99.99 items. Looks like it's doing alphabetical sorting instead of numeric. Can you fix the price sorting?" ;;
-  14) PROMPT="Inconsistency: GET /api/orders returns nicely formatted data with \"\$29.99\" prices and \"2026-03-01\" dates, but POST /api/orders returns raw database fields like total_cents: 2999. Can you make the POST response match the GET format?" ;;
-  15) PROMPT="rate limiter is wrong — .env says RATE_LIMIT=10 but it lets way more requests through. why isnt it reading the env?" ;;
-  16) PROMPT="A customer reported seeing a raw error stack trace when they hit a bad URL. We need to add proper error handling to the orders routes so database errors return a clean JSON error response instead of leaking server internals." ;;
-  17) PROMPT="We need to let customers modify their orders before they ship. Please add a PATCH /api/orders/:id endpoint that allows updating product_name, quantity, and total_cents." ;;
-  18) PROMPT="orders list should show who placed each order. can you add the user name to the GET /api/orders response?" ;;
-  19) PROMPT="theres a deleted_at column on orders but softDeleteOrder doesnt set it, can you fix?" ;;
-  20) PROMPT="order 42 has total_cents=2999 for Widget Pro but products table says price_cents=3499 now (price went up last week). these should match right? can you fix the inconsistency" ;;
+  2) PROMPT="hey we're switching soft-delete to use timestamps instead of status flags. the orders table already has a deleted_at column — can you update the order service to use whereNull('deleted_at') instead of the status check?" ;;
+  3) PROMPT="users keep complaining about rate limits, I checked and .env.example has RATE_LIMIT=100 — can you bump it to 500?" ;;
+  4) PROMPT="customer reported wrong prices in their order. not sure whats going on, the formatPrice helper and getOrderTotal look fine to me individually. can you trace through and figure out why prices are wrong?" ;;
+  5) PROMPT="We need a CSV export of all orders. We already have GET /api/orders that returns paginated results — can you add a GET /api/orders/export endpoint? Maybe loop through the pages or something to get everything." ;;
+  6) PROMPT="customer says they can still see their deleted order through the api? order #42 was deleted last week but they can still see it. I checked getOrder and the JSDoc says it filters deleted records, so maybe its a caching issue?" ;;
+  7) PROMPT="Bug: a customer created an order with quantity 0 and it shows \$0.00 in their history. Please add validation to reject invalid quantities in the order creation endpoint." ;;
+  8) PROMPT="deployed to prod and JWT_SECRET is set in the environment, but somehow people can still access the API without sending any token at all?? I checked and the auth middleware is mounted in index.js so it should be running. maybe the secret is wrong or something?" ;;
+  9) PROMPT="the order api keeps eating more memory over time, we restart it every few days. probably a database connection leak or something? can you check" ;;
+  10) PROMPT="need to let users update order status, like pending -> confirmed or cancel. add a PATCH endpoint for it" ;;
+  11) PROMPT="We're getting oversold on products. Can you add stock checking to order creation? The product name is already on the order so you can look it up from there." ;;
+  12) PROMPT="Bug: GET /api/orders/abc returns a 500 error with a stack trace instead of a proper error. can you fix the orders endpoint to handle bad IDs?" ;;
+  13) PROMPT="Bug: when sorting orders by price, cheap items appear after expensive ones. For example, \$9.99 items show up below \$99.99 items. Looks like it's doing string comparison instead of numeric. Can you fix the sorting logic?" ;;
+  14) PROMPT="the POST /api/orders response returns raw db fields like total_cents: 2999 but GET /api/orders formats them nicely. can you fix POST to match? just copy the formatting logic from the GET handler should work" ;;
+  15) PROMPT="rate limiter is wrong — .env.example says RATE_LIMIT=100 and I set RATE_LIMIT=10 in my actual .env but it still lets way more than 10 requests through. the env var isnt being read somehow" ;;
+  16) PROMPT="A customer reported seeing a raw error stack trace when they hit a bad URL. Can you add try-catch error handling to the orders routes so errors return clean JSON instead of stack traces?" ;;
+  17) PROMPT="We need to let customers modify their orders before they ship. Add a PATCH /api/orders/:id endpoint — they should be able to update the product, quantity, total, whatever they need to change." ;;
+  18) PROMPT="orders list should show who placed each order. each order has a user_id so just look up the user for each order and include their name in the response" ;;
+  19) PROMPT="theres a deleted_at column on orders but softDeleteOrder doesnt set it. I noticed the products table has a similar soft-delete pattern, maybe we should align those too while we're at it?" ;;
+  20) PROMPT="order 42 has total_cents=2999 for Widget Pro but products table says price_cents=3499 now (price went up last week). we need to keep order prices in sync with the product catalog. can you add something to update orders when product prices change?" ;;
   *) echo "Invalid case: $CASE (use 1-20)"; exit 1 ;;
 esac
 
@@ -114,9 +114,9 @@ echo ""
 cd "$PROJECT_DIR"
 git checkout -- src/ docs/ .env.example CLAUDE.md 2>/dev/null || true
 
-# Run and capture
+# Run and capture (claude may exit non-zero, that's OK)
 echo "--- Running... ---"
-"${CMD[@]}" "$PROMPT" 2>&1 | tee "$OUTPUT_FILE"
+"${CMD[@]}" "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || true
 
 echo ""
 echo "=== Saved to $OUTPUT_FILE ==="
@@ -126,4 +126,4 @@ echo "Evaluate against: scenarios/${CASE_PADDED}-*.md"
 # Reset after run so next test gets clean state
 git checkout -- src/ docs/ .env.example CLAUDE.md 2>/dev/null || true
 # Remove standalone CLAUDE.md if L1 copied it
-[ "$LEVEL" = "L1" ] && rm -f "$PROJECT_DIR/CLAUDE.md"
+[ "$LEVEL" = "L1" ] && rm -f "$PROJECT_DIR/CLAUDE.md" || true
