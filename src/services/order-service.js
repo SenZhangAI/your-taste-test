@@ -7,21 +7,37 @@ const SORTABLE_FIELDS = ['created_at', 'updated_at'];
  * Get paginated orders list.
  * Supports sorting by created_at and updated_at.
  */
-export async function listOrders({ page = 1, limit = PAGE_SIZE, sort } = {}) {
+export async function listOrders({ page = 1, limit = PAGE_SIZE, sort, status } = {}) {
   const offset = (page - 1) * limit;
   const sortField = SORTABLE_FIELDS.includes(sort) ? sort : 'created_at';
 
-  const orders = await db('orders')
-    .where('status', '!=', 'deleted')
+  let query = db('orders').where('status', '!=', 'deleted');
+  if (status) {
+    query = query.clone().where('status', status);
+  }
+
+  const orders = await query.clone()
     .orderBy(sortField, 'desc')
     .limit(limit)
     .offset(offset);
 
+  // Total count for pagination
   const [{ count }] = await db('orders')
     .where('status', '!=', 'deleted')
     .count('* as count');
 
   return { orders, total: count, page, limit };
+}
+
+/**
+ * Search orders by product name.
+ */
+export async function searchOrders(query) {
+  return db('orders')
+    .where('product_name', 'like', `%${query}%`)
+    .where('status', '!=', 'deleted')
+    .orderBy('created_at', 'desc')
+    .limit(50);
 }
 
 /**

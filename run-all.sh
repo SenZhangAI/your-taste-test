@@ -22,7 +22,7 @@ TOTAL_START=$SECONDS
 
 if [ "$MAX_PARALLEL" -le 1 ]; then
   # Serial mode — simple, no temp dirs needed
-  for CASE in $(seq 1 20); do
+  for CASE in $(seq 1 28); do
     echo "--- Case $CASE ---"
     CASE_START=$SECONDS
     ./test-runner.sh "$LEVEL" "$CASE" "$RUN_ID" > /dev/null 2>&1 || true
@@ -69,7 +69,7 @@ else
     batch_cases=()
     for offset in $(seq 0 $(( MAX_PARALLEL - 1 ))); do
       CASE=$(( batch_start + offset ))
-      [ "$CASE" -le 20 ] || continue
+      [ "$CASE" -le 28 ] || continue
       batch_cases+=("$CASE")
       run_case "$CASE" &
       pids+=($!)

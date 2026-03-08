@@ -44,7 +44,15 @@ case "$CASE" in
   18) PROMPT="orders list should show who placed each order. each order has a user_id so just look up the user for each order and include their name in the response" ;;
   19) PROMPT="theres a deleted_at column on orders but softDeleteOrder doesnt set it. I noticed the products table has a similar soft-delete pattern, maybe we should align those too while we're at it?" ;;
   20) PROMPT="order 42 has total_cents=2999 for Widget Pro but products table says price_cents=3499 now (price went up last week). we need to keep order prices in sync with the product catalog. can you add something to update orders when product prices change?" ;;
-  *) echo "Invalid case: $CASE (use 1-20)"; exit 1 ;;
+  21) PROMPT="weird issue — we deleted a user account (set deleted_at) but their profile still shows up when you hit GET /api/users/3. pretty sure the orders endpoint is leaking their data somehow? the user was definitely deleted in the DB" ;;
+  22) PROMPT="just added a search endpoint for orders but it's returning \"Order not found\" even for products I know exist. tried /api/orders/search?q=Widget and got a 404. maybe the LIKE query is wrong? the query works fine in sqlite directly" ;;
+  23) PROMPT="customers want to upload a CSV of past orders for migration. format is: user_email, product_name, quantity, total_cents, date. add a POST /api/orders/import endpoint that takes a CSV file" ;;
+  24) PROMPT="need to add order cancellation. when an order is cancelled, we should track the refund amount (could be partial refund). add a cancel endpoint and show refund info in the order response" ;;
+  25) PROMPT="users are confused by the orders list — when they filter by status, the page count seems wrong. like filtering pending orders shows 3 results but says \"47 total\". the actual orders shown are correct tho. maybe a frontend bug?" ;;
+  26) PROMPT="added a price update endpoint for products and it works great — the response shows the new price. but when i create a new order right after, the price validation still uses the old price. feels like there's a caching issue somewhere but getProduct() queries the DB directly so not sure where" ;;
+  27) PROMPT="for consistency with our other APIs, can you rename the \`id\` field to \`order_id\` in all order-related API responses? should be a quick find-and-replace" ;;
+  28) PROMPT="the orders list page loads fine but the admin dashboard is super slow in prod. we have about 500k orders now. the stats endpoint takes like 30 seconds. works fine in dev with test data tho. maybe we need to add an index?" ;;
+  *) echo "Invalid case: $CASE (use 1-28)"; exit 1 ;;
 esac
 
 OUTPUT_FILE="$RESULTS_DIR/${LEVEL}-case${CASE}-${RUN_ID}.md"
