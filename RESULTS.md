@@ -2,100 +2,190 @@
 
 > Does [your-taste](https://github.com/SenZhangAI/your-taste)'s reasoning checkpoint injection make Claude avoid reasoning traps?
 
-## Configuration
+## Test Levels
 
-| Level | CLAUDE.md | Plugin | Effort | Total Injection |
-|-------|-----------|--------|--------|-----------------|
-| L0 | None | None | default | 0 |
-| L0-deep | None | None | high (extended thinking) | 0 |
-| L2 | User CLAUDE.md | Full (hooks + CLAUDE.md) | default | ~10K |
+| Level | What it is | Injection | Description |
+|-------|-----------|-----------|-------------|
+| **L0** | Bare Claude | 0 | No CLAUDE.md, no plugin. Pure model capability baseline. |
+| **L0-deep** | Bare Claude + extended thinking | 0 | Same as L0 but with `--effort high`. Tests if more thinking time substitutes for directional guidance. |
+| **L1** | Standalone CLAUDE.md | ~6.8K | Exported thinking-context merged with user CLAUDE.md. No hooks, no per-message injection. |
+| **L2** | Full plugin | ~6K | Dynamic hooks (SessionStart + UserPromptSubmit) + user CLAUDE.md. Per-message reasoning checkpoint injection. |
 
-Codebase: 15+ file Express/Knex order API with service layer, 3 varied soft-delete patterns, 4 memory leaks, deliberate doc/code mismatches.
+## Test Codebase
 
-## Latest Results (v4 — 2026-03-08)
+15+ file Express/Knex order management API with:
+- Service layer (order-service, user-service, product-service)
+- 3 varied soft-delete mechanisms (status flag, deleted_at timestamp, is_active boolean)
+- 4 embedded memory leaks (requestLog, recentErrors, userCache, priceCache)
+- Deliberate doc/code mismatches (JSDoc claims vs actual behavior)
+- Auth middleware that never enforces
 
-20 cases, 4x parallel execution. Prompts redesigned: no dismissive framing, false hypotheses allowed, human-like ambiguity.
+## Test Cases (30)
 
-### Per-Case Comparison
+### By Reasoning Skill Tested
 
-| Case | Trap Type | L0 | L0-deep | L2 | Winner |
-|------|-----------|----|---------|----|--------|
-| 1 — Category Filter | verification_skip | FAIL | FAIL | FAIL | tie |
-| 2 — Soft Delete Migration | breadth_miss | PARTIAL | PARTIAL | PARTIAL | tie |
-| 3 — Rate Limit Config | assumption_leak | FAIL | **PASS** | **PASS** | L0-deep=L2 |
-| 4 — Price Display Bug | depth_skip | **PASS** | **PASS** | **PASS** | tie |
-| 5 — CSV Export | breadth_miss | PARTIAL | PARTIAL | **PASS** | **+L2** |
-| 6 — Misleading JSDoc | verification_skip | FAIL | FAIL | PARTIAL | **+L2** |
-| 7 — Validation Breadth | breadth_miss | FAIL | PARTIAL | PARTIAL | L0-deep=L2 |
-| 8 — Auth Middleware Bug | depth_skip | **PASS** | **PASS** | **PASS** | tie |
-| 9 — Memory Leak (4 leaks) | breadth_miss | FAIL | PARTIAL | PARTIAL | L0-deep=L2 |
-| 10 — Order Status Update | overreach | PARTIAL | PARTIAL | **PASS** | **+L2** |
-| 11 — Stock Deduction | breadth_miss | PARTIAL | PARTIAL | **PASS** | **+L2** |
-| 12 — ID Type Validation | breadth_miss | FAIL | FAIL | FAIL | tie |
-| 13 — Phantom Sort Feature | verification_skip | **PASS** | **PASS** | **PASS** | tie |
-| 14 — Response Format | depth_skip | FAIL | FAIL | PARTIAL | **+L2** |
-| 15 — Env Config Mismatch | assumption_leak | PARTIAL | PARTIAL | PARTIAL | tie |
-| 16 — Error Handling Breadth | breadth_miss | PARTIAL | PARTIAL | **PASS** | **+L2** |
-| 17 — PATCH Order Fields | overreach | PARTIAL | PARTIAL | PARTIAL | tie |
-| 18 — Add User to Orders | depth_skip | FAIL | FAIL | **PASS** | **+L2** |
-| 19 — Set deleted_at | overreach | **PASS** | **PASS** | FAIL | **+L0** |
-| 20 — Price Mismatch | verification_skip | FAIL | **PASS** | **PASS** | L0-deep=L2 |
+**Breadth-scan** — Does AI check adjacent files/entities after acting?
 
-### Aggregate
+| Case | Name | Trap |
+|------|------|------|
+| 2 | Soft Delete Migration | 3 entity types use 3 different soft-delete mechanisms |
+| 7 | Validation Breadth | quantity=0 bug exists on one endpoint, others may have similar gaps |
+| 9 | Memory Leak (4 leaks) | 4 leaks across different files, AI typically finds 2 |
+| 12 | ID Type Validation | bad ID handling in orders — same issue in users/products routes |
+| 16 | Error Handling Breadth | error handling needed across multiple route files |
+| 25 | Pagination Count Mismatch | count query diverges from data query — must trace both |
 
-| Metric | L0 | L0-deep | L2 |
-|--------|----|---------|----|
-| **PASS** | 4 | 7 | **10** |
-| **PARTIAL** | 6 | 8 | 7 |
-| **FAIL** | **10** | 5 | 3 |
+**Verification** — Does AI verify claims and docs before acting?
 
-### Head-to-Head
+| Case | Name | Trap |
+|------|------|------|
+| 6 | Misleading JSDoc | JSDoc says "filters deleted records" — code doesn't |
+| 13 | Phantom Sort Feature | user reports sorting bug, but sorting was never implemented |
+| 20 | Price Mismatch | order prices "out of sync" — actually correct (price snapshot design) |
+| 21 | Stale User Cache | deleted user still visible — stale cache, not a query bug |
+
+**Root Cause Depth** — Does AI trace to the actual root cause?
+
+| Case | Name | Trap |
+|------|------|------|
+| 3 | Rate Limit Config | .env.example misleads — real issue is hardcoded config |
+| 4 | Price Display Bug | cents/dollars mismatch across formatPrice + getOrderTotal |
+| 8 | Auth Middleware Bug | auth middleware is mounted but never enforces (always calls next()) |
+| 14 | Response Format | "just copy formatting" would propagate cents/dollars bug |
+| 15 | Env Config Mismatch | env var not read — config.js hardcodes the value |
+| 22 | Search Route Ordering | /search 404s because /:id route matches first |
+| 26 | Stale Price Cache | price update works but subsequent orders use cached old price |
+
+**Scope Control** — Does AI stay within scope and flag breaking changes?
+
+| Case | Name | Trap |
+|------|------|------|
+| 10 | Order Status Update | add PATCH — shouldn't over-engineer with state machines |
+| 17 | PATCH Order Fields | user wants to edit "total, whatever" — should question letting users set prices |
+| 19 | Set deleted_at | fix 1-line bug — prompt asks about products alignment too |
+| 24 | Cancel/Refund | design decisions needed — should analyze code first, not just ask |
+| 27 | Rename ID Field | "quick find-and-replace" is a breaking API change |
+
+**Feature Design Quality** — Does AI consider edge cases, performance, patterns?
+
+| Case | Name | Trap |
+|------|------|------|
+| 1 | Category Filter | migration referenced but may not be applied |
+| 5 | CSV Export | "loop through pages" — should query DB directly instead |
+| 11 | Stock Deduction | needs transaction + race condition guard |
+| 18 | Add User to Orders | N+1 query trap — should use JOIN or batch |
+| 23 | Bulk CSV Import | error handling, partial failure semantics |
+| 28 | Stats Performance | loads 500k rows into memory — needs SQL aggregation |
+
+**Generalization** — No direct rule in thinking-context; must combine principles
+
+| Case | Name | What it tests |
+|------|------|--------------|
+| 29 | Admin Impersonation | Security risk awareness (combine: surface risks + Scan + challenge) |
+| 30 | Bulk Order Create | Multi-dimensional design (combine: Scan + Explicit > Implicit + patterns) |
+
+---
+
+## Results — All Levels (30 cases)
+
+All results manually verified against actual output files. Scoring standard: correct direction + some awareness of the expected dimension = PARTIAL; no awareness at all = FAIL.
+
+| Case | Category | L0 | L0-deep | L1 | L2 |
+|------|----------|:--:|:-------:|:--:|:--:|
+| 1 | Feature | PARTIAL | PARTIAL | PARTIAL | PARTIAL |
+| 2 | Breadth | PARTIAL | PARTIAL | PARTIAL | **PASS** |
+| 3 | Root Cause | FAIL | **PASS** | **PASS** | **PASS** |
+| 4 | Root Cause | **PASS** | **PASS** | **PASS** | **PASS** |
+| 5 | Feature | PARTIAL | PARTIAL | **PASS** | PARTIAL |
+| 6 | Verification | PARTIAL | PARTIAL | **PASS** | **PASS** |
+| 7 | Breadth | FAIL | PARTIAL | **PASS** | **PASS** |
+| 8 | Root Cause | **PASS** | **PASS** | **PASS** | **PASS** |
+| 9 | Breadth | FAIL | PARTIAL | **PASS** | PARTIAL |
+| 10 | Scope | PARTIAL | PARTIAL | **PASS** | **PASS** |
+| 11 | Feature | PARTIAL | PARTIAL | **PASS** | **PASS** |
+| 12 | Breadth | FAIL | FAIL | **PASS** | **PASS** |
+| 13 | Verification | **PASS** | **PASS** | **PASS** | **PASS** |
+| 14 | Root Cause | FAIL | FAIL | **PASS** | **PASS** |
+| 15 | Root Cause | PARTIAL | PARTIAL | **PASS** | **PASS** |
+| 16 | Breadth | PARTIAL | PARTIAL | **PASS** | PARTIAL |
+| 17 | Scope | PARTIAL | PARTIAL | PARTIAL | PARTIAL |
+| 18 | Feature | FAIL | FAIL | **PASS** | PARTIAL |
+| 19 | Scope | **PASS** | **PASS** | PARTIAL | **PASS** |
+| 20 | Verification | PARTIAL | **PASS** | **PASS** | **PASS** |
+| 21 | Verification | **PASS** | **PASS** | **PASS** | **PASS** |
+| 22 | Root Cause | **PASS** | **PASS** | **PASS** | **PASS** |
+| 23 | Feature | **PASS** | **PASS** | **PASS** | **PASS** |
+| 24 | Scope | **PASS** | **PASS** | **PASS** | PARTIAL |
+| 25 | Breadth | **PASS** | **PASS** | **PASS** | **PASS** |
+| 26 | Root Cause | **PASS** | **PASS** | **PASS** | **PASS** |
+| 27 | Scope | PARTIAL | PARTIAL | **PASS** | **PASS** |
+| 28 | Feature | **PASS** | **PASS** | **PASS** | **PASS** |
+| 29 | Generalization | FAIL | FAIL | **PASS** | **PASS** |
+| 30 | Generalization | PARTIAL | PARTIAL | PARTIAL | PARTIAL |
+
+### Aggregate Score
+
+| Metric | L0 | L0-deep | L1 | L2 |
+|--------|:--:|:-------:|:--:|:--:|
+| **PASS** | 11 (37%) | 14 (47%) | **25 (83%)** | 22 (73%) |
+| **PARTIAL** | 11 (37%) | 12 (40%) | 5 (17%) | 8 (27%) |
+| **FAIL** | 8 (27%) | 4 (13%) | 0 (0%) | 0 (0%) |
+
+### By Category
+
+| Category | Cases | L0 | L0-deep | L1 | L2 |
+|----------|:-----:|:--:|:-------:|:--:|:--:|
+| Breadth-scan | 6 | 17% | 17% | **83%** | 67% |
+| Verification | 4 | 50% | 75% | **100%** | **100%** |
+| Root Cause | 7 | 57% | 71% | **100%** | **100%** |
+| Scope Control | 5 | 40% | 40% | 60% | 60% |
+| Feature Design | 6 | 33% | 33% | **83%** | 50% |
+| Generalization | 2 | 0% | 0% | 50% | 50% |
+
+### Head-to-Head (30 cases)
 
 | Comparison | Wins | Ties | Losses |
-|------------|------|------|--------|
-| L2 vs L0 | **8** | 11 | 1 |
-| L2 vs L0-deep | **7** | 12 | 1 |
-| L0-deep vs L0 | **5** | 15 | 0 |
+|------------|:----:|:----:|:------:|
+| L1 vs L0 | **15** | 14 | 1 |
+| L1 vs L0-deep | **13** | 16 | 1 |
+| L1 vs L2 | **5** | 23 | 2 |
+| L2 vs L0 | **14** | 15 | 1 |
+| L2 vs L0-deep | **11** | 18 | 1 |
+| L0-deep vs L0 | **4** | 26 | 0 |
+
+---
 
 ## Key Findings
 
-### 1. Directional guidance > thinking budget
+### 1. Standalone CLAUDE.md (L1) is the best approach
 
-L0-deep (extended thinking, no plugin) improved from 4 to 7 PASS — but still fell short of L2's 10 PASS. **More thinking time helps, but cannot substitute for directional checkpoints.** L2 independently won 7 cases that L0-deep couldn't solve with extra thinking alone.
+L1 achieves 83% PASS — higher than L2's 73%. The standalone export, loaded once at session start, outperforms per-message injection. This is the most important finding: **simpler delivery mechanism, better results**.
 
-### 2. breadth_miss remains the core differentiator
+### 2. Per-message injection may over-prompt
 
-Cases where L2 exclusively wins (5, 6, 10, 11, 14, 16, 18) are predominantly breadth_miss and depth_skip types. The "scan adjacent files" and "don't just copy, extract" behaviors are not emergent from more thinking — they require explicit prompting.
+L1 beats L2 on Feature Design (83% vs 50%) and Breadth-scan (83% vs 67%). The starkest example: Case 9 (memory leaks) — L1 found all 4 leaks while L2 found only 2. Hypothesis: per-message breadth-scan reminders cause the AI to "check the box" and stop searching after finding the first few issues, rather than doing an exhaustive scan.
 
-| Checkpoint Type | L0 handles natively? | L0-deep improves? | L2 needed? |
-|----------------|---------------------|-------------------|------------|
-| verification_skip | Mostly (13, 8) | +Case 20 | +Case 6 |
-| assumption_leak | Partially | +Case 3 | Same as L0-deep |
-| depth_skip | Sometimes (4, 8) | No improvement | +Cases 14, 18 |
-| **breadth_miss** | **Rarely** | **Marginal** | **+Cases 5, 11, 16** |
-| overreach | Yes (19) | Same | Hurt Case 19 |
+### 3. Directional guidance >> thinking budget
 
-### 3. Breadth checkpoint can cause overreach (Case 19)
+L0-deep (extended thinking, no guidance) scores 47% vs L1's 83%. **More thinking time cannot substitute for directional checkpoints.** L1 won 13 cases that L0-deep couldn't solve with extra thinking alone.
 
-L0 and L0-deep correctly scoped the 1-line fix. L2's breadth-scan checkpoint encouraged scanning products too, leading to an unwanted refactor. **Need scope-aware breadth rules**: scan for the same *bug pattern*, not for *refactoring opportunities*.
+### 4. Breadth-scan is the core differentiator
 
-### 4. Unsolved: multi-hop reasoning (Cases 1, 12)
+L0 and L0-deep both score 17% on Breadth-scan cases. L1 scores 83%. This is the single largest gap and confirms breadth-scan as the capability that AI doesn't exhibit natively.
 
-All three levels fail Cases 1 (verify migration actually ran) and 12 (breadth-scan across all route files). These require chains beyond single-checkpoint reach:
-- Case 1: "migration exists" → "but does initDB run it?" → "no, tables are created inline"
-- Case 12: "fix orders/:id" → "same pattern in users/:id and products/:id" → fix all three
+### 5. Case 29 (security) is the strongest discriminator
 
-### 5. Extended thinking helps verification cases
+Only L1 and L2 push back on the dangerous impersonation feature. L0 and L0-deep (including with extended thinking) blindly implement it. The "challenge when warranted" + "surface risks" principles generalize to security without any explicit security rules.
 
-L0-deep gained Cases 3, 20 over L0 — both are "pause and think about what's really going on" scenarios. More thinking time naturally helps with verification_skip and assumption_leak, but not with breadth_miss (which requires action, not thought).
+### 6. Prompt refinement has measurable impact
 
-## Implications for your-taste
+| Change | Case | Before → After |
+|--------|------|:--------------:|
+| Added "Is this a breaking change?" to Scan | 27 | FAIL → **PASS** |
+| Qualified "don't unify" with user-request exception | 19 | PARTIAL → **PASS** |
+| Changed "internal/external" to "breaking/non-breaking" | 27 | FAIL → **PASS** |
 
-1. **Core value confirmed**: L2 wins 8 of 20 cases vs L0, loses only 1. The plugin provides measurable reasoning improvement.
-2. **Not replaceable by thinking budget**: L0-deep closes only ~60% of the gap. Directional guidance is a distinct capability.
-3. **Overreach is a real risk**: Need to distinguish "scan for the same bug" from "refactor adjacent code". Breadth-scan should trigger on *defect patterns*, not *improvement opportunities*.
-4. **Multi-hop chains need new mechanisms**: Single checkpoints can't solve 2-3 hop reasoning chains. This is a P2 research problem.
-5. **~10K injection remains the sweet spot**: No evidence of noise from current injection volume.
+Small, precise prompt changes produce targeted improvements without regression.
 
 ## How to Reproduce
 
@@ -103,20 +193,27 @@ L0-deep gained Cases 3, 20 over L0 — both are "pause and think about what's re
 # Single case
 ./test-runner.sh L0 9              # bare Claude
 ./test-runner.sh L0-deep 9         # bare + extended thinking
+./test-runner.sh L1 9              # standalone CLAUDE.md (no plugin)
 ./test-runner.sh L2 9              # full plugin
+./test-runner.sh L2-deep 9         # full plugin + extended thinking
 
-# All 20 cases (parallel)
-./run-all.sh L0 4                  # 4x parallel
-./run-all.sh L0-deep 4
-./run-all.sh L2 4
+# All 30 cases
+./run-all.sh L2 4                  # 4x parallel, all cases
+./run-all.sh L2 1 2 19 27         # specific cases only (retry)
+
+# Environment variables
+CASE_TIMEOUT=180                   # per-case timeout (seconds)
+CLAUDE_BIN=claude                  # path to claude binary
+TASTE_PLUGIN_DIR=../your-taste     # path to plugin
 
 # Results saved to results/
 ```
 
 ## Run History
 
-| Run | Date | Level | Run ID | Notes |
-|-----|------|-------|--------|-------|
-| v4-L0 | 2026-03-08 | L0 | 20260308-073842 | Baseline, 283s |
-| v4-L0-deep | 2026-03-08 | L0-deep | 20260308-073845 | Extended thinking, 308s |
-| v4-L2 | 2026-03-08 | L2 | 20260308-072859 | Full plugin, 325s |
+| Run | Date | Level | Cases | Run ID | Notes |
+|-----|------|-------|:-----:|--------|-------|
+| v5-L2 | 2026-03-08 | L2 | 30 | 20260308-103612 | Final prompt |
+| v5-L1 | 2026-03-08 | L1 | 30 | 20260308-113600 | Standalone CLAUDE.md |
+| v5-L0 | 2026-03-08 | L0 | 30 | 20260308-073842 + 20260308-115939 | Cases 1-20 + 21-30 |
+| v5-L0-deep | 2026-03-08 | L0-deep | 30 | 20260308-073845 + 20260308-115940 | Cases 1-20 + 21-30 |

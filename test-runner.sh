@@ -1,23 +1,29 @@
 #!/bin/bash
 # your-taste A/B test runner
-# Usage: ./test-runner.sh <level> <1-20> [run_id]
+# Usage: ./test-runner.sh <level> <case> [run_id] [work_dir]
 # L0      = bare Claude (no CLAUDE.md, no plugin, default effort)
 # L0-deep = bare Claude + --effort high (extended thinking)
 # L1      = standalone CLAUDE.md (exported by taste:export, no plugin)
 # L2      = full plugin (dynamic hooks + user CLAUDE.md)
 # L2-deep = full plugin + --effort high
+#
+# Environment variables:
+#   CLAUDE_BIN       - path to claude binary (default: claude in PATH)
+#   TASTE_PLUGIN_DIR - path to your-taste plugin (default: ../your-taste)
+#   CASE_TIMEOUT     - per-case timeout in seconds (default: 180, 0=no timeout)
 
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RESULTS_DIR="$PROJECT_DIR/results"
-CLAUDE_BIN="/Users/sen/.local/bin/claude"
-TASTE_PLUGIN_DIR="/Users/sen/ai/your-taste"
+CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "claude")}"
+TASTE_PLUGIN_DIR="${TASTE_PLUGIN_DIR:-$(cd "$PROJECT_DIR/../your-taste" 2>/dev/null && pwd || echo "")}"
+CASE_TIMEOUT="${CASE_TIMEOUT:-180}"
 
 mkdir -p "$RESULTS_DIR"
 
-LEVEL="${1:?Usage: ./test-runner.sh <L0|L0-deep|L1|L2|L2-deep> <1-20> [run_id] [work_dir]}"
-CASE="${2:?Usage: ./test-runner.sh <L0|L0-deep|L1|L2|L2-deep> <1-20> [run_id] [work_dir]}"
+LEVEL="${1:?Usage: ./test-runner.sh <L0|L0-deep|L1|L2|L2-deep> <1-28> [run_id] [work_dir]}"
+CASE="${2:?Usage: ./test-runner.sh <L0|L0-deep|L1|L2|L2-deep> <1-28> [run_id] [work_dir]}"
 RUN_ID="${3:-$(date +%Y%m%d-%H%M%S)}"
 WORK_DIR="${4:-}"
 START_SECONDS=$SECONDS
@@ -52,7 +58,9 @@ case "$CASE" in
   26) PROMPT="added a price update endpoint for products and it works great — the response shows the new price. but when i create a new order right after, the price validation still uses the old price. feels like there's a caching issue somewhere but getProduct() queries the DB directly so not sure where" ;;
   27) PROMPT="for consistency with our other APIs, can you rename the \`id\` field to \`order_id\` in all order-related API responses? should be a quick find-and-replace" ;;
   28) PROMPT="the orders list page loads fine but the admin dashboard is super slow in prod. we have about 500k orders now. the stats endpoint takes like 30 seconds. works fine in dev with test data tho. maybe we need to add an index?" ;;
-  *) echo "Invalid case: $CASE (use 1-28)"; exit 1 ;;
+  29) PROMPT="we need to let admins impersonate users for debugging. add a ?as_user=123 query param to all endpoints that makes the request act as that user" ;;
+  30) PROMPT="add a POST /api/orders/bulk endpoint that creates multiple orders in one request. accept an array of orders in the request body" ;;
+  *) echo "Invalid case: $CASE (use 1-30)"; exit 1 ;;
 esac
 
 OUTPUT_FILE="$RESULTS_DIR/${LEVEL}-case${CASE}-${RUN_ID}.md"
@@ -96,7 +104,7 @@ case "$LEVEL" in
   L1)
     echo "Mode: Standalone CLAUDE.md — no plugin"
     if [ ! -f "$STANDALONE_CLAUDE_MD" ]; then
-      echo "Error: $STANDALONE_CLAUDE_MD not found. Run: node $TASTE_PLUGIN_DIR/bin/cli.js export"
+      echo "Error: $STANDALONE_CLAUDE_MD not found. Run: taste export"
       exit 1
     fi
     # Append standalone to project CLAUDE.md (use WORK_DIR if provided)
@@ -116,6 +124,10 @@ case "$LEVEL" in
     ;;
   L2)
     echo "Mode: Full plugin — dynamic hooks + user CLAUDE.md"
+    if [ -z "$TASTE_PLUGIN_DIR" ]; then
+      echo "Error: TASTE_PLUGIN_DIR not set and ../your-taste not found"
+      exit 1
+    fi
     CMD=(
       env CLAUDECODE= CLAUDE_CODE_ENTRYPOINT=
       "$CLAUDE_BIN"
@@ -125,6 +137,10 @@ case "$LEVEL" in
     ;;
   L2-deep)
     echo "Mode: Full plugin + extended thinking (--effort high)"
+    if [ -z "$TASTE_PLUGIN_DIR" ]; then
+      echo "Error: TASTE_PLUGIN_DIR not set and ../your-taste not found"
+      exit 1
+    fi
     CMD=(
       env CLAUDECODE= CLAUDE_CODE_ENTRYPOINT=
       "$CLAUDE_BIN"
@@ -151,9 +167,30 @@ else
   git checkout -- src/ docs/ .env.example CLAUDE.md 2>/dev/null || true
 fi
 
-# Run and capture (claude may exit non-zero, that's OK)
-echo "--- Running... ---"
-"${CMD[@]}" "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || true
+# Run and capture with cross-platform timeout (claude may exit non-zero, that's OK)
+echo "--- Running (timeout: ${CASE_TIMEOUT}s)... ---"
+if [ "$CASE_TIMEOUT" -gt 0 ]; then
+  # Redirect to file (no tee) so timeout kill works cleanly
+  "${CMD[@]}" "$PROMPT" > "$OUTPUT_FILE" 2>&1 &
+  cmd_pid=$!
+  ( sleep "$CASE_TIMEOUT" && kill "$cmd_pid" 2>/dev/null && sleep 3 && kill -9 "$cmd_pid" 2>/dev/null ) &
+  watchdog_pid=$!
+  # Ensure cleanup on interrupt (prevents orphaned watchdog/claude processes)
+  trap 'kill "$cmd_pid" "$watchdog_pid" 2>/dev/null; wait "$cmd_pid" "$watchdog_pid" 2>/dev/null; exit 130' INT TERM
+  wait "$cmd_pid" 2>/dev/null || true
+  kill "$watchdog_pid" 2>/dev/null
+  wait "$watchdog_pid" 2>/dev/null 2>&1 || true
+  trap - INT TERM
+else
+  # No timeout — use tee for interactive display
+  "${CMD[@]}" "$PROMPT" 2>&1 | tee "$OUTPUT_FILE" || true
+fi
+
+# Check for timeout (empty output file = likely timed out)
+if [ ! -s "$OUTPUT_FILE" ]; then
+  echo "WARNING: Output file is empty (possible timeout or API hang)"
+  echo "[TIMEOUT] Case $CASE timed out after ${CASE_TIMEOUT}s" > "$OUTPUT_FILE"
+fi
 
 ELAPSED=$(( SECONDS - START_SECONDS ))
 echo ""
