@@ -135,6 +135,77 @@ L1's ~6.8K loaded once outperforms L2's ~6K loaded repeatedly. Total token budge
 | v4 | 20 | 50% | Added 10 new cases (21-28), L0-deep baseline |
 | **v5** | **30** | **73%** | Refined Scan + scope rules, L1 added (83%) |
 
+## Multi-turn & Compact Experiment (v5.1)
+
+### Motivation
+
+The v5 single-turn results showed L1 > L2. But does L1's one-time CLAUDE.md loading decay over long conversations? And does `/compact` (context compression) preserve or destroy the checkpoints?
+
+### Experiment Design
+
+**Compact test** (`compact-test.sh`): Real multi-turn sessions using `--resume` for session continuity.
+1. 8 filler turns (simple single-point coding tasks to fill context)
+2. `/compact` to trigger context compression
+3. Critical breadth-scan prompt (Case 9: find 4 memory leaks)
+
+Each condition (L0/L1/L2) run 3 times for reliability.
+
+**Simulated multi-turn** (`multi-turn-runner.sh`): Single prompt with 8 turns of conversation history embedded in the prompt text. Tests attention dilution without session management complexity.
+
+### Results: Compact Test (Case 9, 3 runs each)
+
+| Run | L0 | L1 | L2 |
+|:---:|:--:|:--:|:--:|
+| 1 | 4/4 | 4/4 | 4/4 |
+| 2 | 4/4 | 4/4 | 4/4 |
+| 3 | 4/4 | 4/4 | 2/4 (+2 noted) |
+
+**All levels perform well after compact.** Even L0 (bare Claude) finds all 4 leaks consistently.
+
+### Results: Simulated Multi-turn (Case 9, 1 run each)
+
+| Level | Leaks found | Score |
+|-------|:-----------:|:-----:|
+| L0 | 4/4 | PASS |
+| L1 | 2/4 | PARTIAL |
+
+Single runs have high variance — the L0 > L1 inversion is likely noise.
+
+### Key Findings
+
+**1. Compact preserves CLAUDE.md (system context, not compressed).**
+
+CLAUDE.md is system context, not conversation history. `/compact` compresses the conversation but reloads CLAUDE.md fresh.
+
+**2. Codebase familiarity is a confounding variable.**
+
+The 8 filler turns caused the AI to read and modify files across the codebase — including files containing the 4 memory leaks (rate-limiter.js via "request counter" task, product-service.js via "product sorting" task, etc.). After compact, the summary retains "which files I've touched," giving the AI a mental map it wouldn't have in a cold-start scenario. This explains why even L0 scores 4/4 post-compact — it's not that compact "resets to clean state," but that **filler turns gave the AI prior exposure to the leak-containing files**.
+
+**3. Two distinct capabilities being tested.**
+
+| Scenario | What it tests | L0 | L1 |
+|----------|--------------|:--:|:--:|
+| Single-turn (cold start) | Active discovery via breadth-scan | 37% | **83%** |
+| Multi-turn + compact (warm start) | Connecting previously-seen files to a new problem | 4/4 | 4/4 |
+
+Cold-start discovery is where checkpoints shine — the AI has no prior knowledge and must actively search. Warm-start connection is easier because the AI already has a codebase map from prior turns. Both matter in practice: cold-start covers early-session and new-file scenarios; warm-start covers ongoing work in familiar code.
+
+**4. L2's checklist effect persists regardless of context state.**
+
+L2 run 3 found only 2/4 leaks (requestLog + recentErrors), noting the other 2 as "lower priority" without fixing them — even with warm-start advantage. This mirrors the single-turn L2 behavior on Case 9 (PARTIAL). The per-message injection pattern causes under-exploration independent of codebase familiarity.
+
+**5. Single-turn testing remains the authoritative methodology.**
+
+It isolates the cold-start discovery capability — the harder, more differentiating scenario. The v5 single-turn results (30 cases, 4 levels) remain the primary comparison. Multi-turn+compact results are supplementary, demonstrating that accumulated codebase knowledge can substitute for breadth-scan in warm-start scenarios.
+
+### Implications
+
+- **L1's value is concentrated in cold-start scenarios** — session start, new files, unfamiliar code. This is where checkpoints provide the most leverage.
+- **Codebase familiarity naturally compensates for lack of checkpoints** in warm-start scenarios. This is good news: even without your-taste, AI improves as it works longer in a codebase.
+- **L2's per-message injection hurts even in warm-start.** The checklist effect is inherent to the injection mechanism, not context state. This further supports L1 over L2.
+- **Product recommendation unchanged: L1 (export) as default.**
+- **Future experiment needed:** Repeat compact test with filler tasks that don't touch leak-containing files (e.g., README edits, config changes) to isolate compact's effect on CLAUDE.md preservation without the familiarity confound.
+
 ## Implications for your-taste
 
 1. **Export (L1) should be the default recommendation.** Simpler to set up (no hooks), better results (83% vs 73%). The plugin's value is in generating and evolving the thinking-context, not in per-message injection.

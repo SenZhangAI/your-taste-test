@@ -209,10 +209,24 @@ TASTE_PLUGIN_DIR=../your-taste     # path to plugin
 # Results saved to results/
 ```
 
+## Compact Decay Test (v5.1)
+
+Tests whether checkpoints survive `/compact` in real multi-turn sessions.
+Setup: 8 filler turns → /compact → Case 9 (breadth-scan: find 4 memory leaks).
+
+| Run | L0 | L1 | L2 |
+|:---:|:--:|:--:|:--:|
+| 1 | 4/4 PASS | 4/4 PASS | 4/4 PASS |
+| 2 | 4/4 PASS | 4/4 PASS | 4/4 PASS |
+| 3 | 4/4 PASS | 4/4 PASS | 2/4 PARTIAL |
+
+**Caveat:** Filler turns exposed the AI to leak-containing files (rate-limiter.js, product-service.js, etc.), giving it a codebase map that single-turn tests lack. L0's 4/4 reflects warm-start familiarity, not cold-start breadth-scan. L2's run 3 (2/4) shows checklist effect persists even with warm-start advantage. See ANALYSIS.md for detailed interpretation.
+
 ## Run History
 
 | Run | Date | Level | Cases | Run ID | Notes |
 |-----|------|-------|:-----:|--------|-------|
+| v5.1-compact | 2026-03-08 | L0/L1/L2 | Case 9 ×3 | compact-* | Multi-turn + /compact |
 | v5-L2 | 2026-03-08 | L2 | 30 | 20260308-103612 | Final prompt |
 | v5-L1 | 2026-03-08 | L1 | 30 | 20260308-113600 | Standalone CLAUDE.md |
 | v5-L0 | 2026-03-08 | L0 | 30 | 20260308-073842 + 20260308-115939 | Cases 1-20 + 21-30 |
