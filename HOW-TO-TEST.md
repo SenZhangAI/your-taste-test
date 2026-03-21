@@ -3,113 +3,172 @@
 ## Prerequisites
 
 ```bash
-cd /Users/sen/ai/your-taste-test
+cd your-taste-test
 npm install
 mkdir -p data
 npm run seed   # Creates 5000 test orders
 ```
 
-Verify the project works:
-```bash
-node src/index.js &
-curl "http://localhost:3000/api/orders?limit=1"
-# Should show a price like $2999.00 (the bug is intentional)
-kill %1
-```
+## Test Levels
 
-## Understanding the Levels
-
-| Level | Command | What's active |
-|-------|---------|---------------|
-| **L0** | Raw `claude` binary, `--setting-sources ""` | No plugins, no user CLAUDE.md, no hooks |
-| **L2** | `claude --plugin-dir your-taste` | your-taste plugin (SessionStart + UserPromptSubmit hooks) + user CLAUDE.md (your-taste:start/end section) |
-
-### How the toggle works
-
-**your-taste loads via a shell alias:**
-```bash
-# Your ~/.zshrc has:
-alias claude='claude --plugin-dir /Users/sen/ai/your-taste'
-```
-
-**L0 bypasses this** by calling the raw binary directly:
-```bash
-/Users/sen/.local/bin/claude -p --setting-sources "" ...
-```
-
-**L2 uses the plugin explicitly:**
-```bash
-/Users/sen/.local/bin/claude --plugin-dir /Users/sen/ai/your-taste -p ...
-```
-
-Both also unset `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` to avoid nesting detection when running from inside a Claude Code session.
+| Level | What it is | Injection |
+|-------|-----------|-----------|
+| **L0** | Bare Claude | None — no CLAUDE.md, no plugin |
+| **L0-deep** | Bare Claude + `--effort high` | None — tests if thinking time substitutes for guidance |
+| **L1** | Standalone CLAUDE.md | ~6.8K chars, loaded once at session start |
+| **L2** | Full plugin | SessionStart + UserPromptSubmit hooks + user CLAUDE.md |
 
 ## Running Tests
 
 ### Single case
 ```bash
-# L0 (bare Claude)
-CLAUDECODE= CLAUDE_CODE_ENTRYPOINT= /Users/sen/.local/bin/claude \
-  --setting-sources "" \
-  -p --no-session-persistence --dangerously-skip-permissions \
-  --permission-mode bypassPermissions \
-  "Your prompt here"
-
-# L2 (your-taste enabled)
-CLAUDECODE= CLAUDE_CODE_ENTRYPOINT= /Users/sen/.local/bin/claude \
-  --plugin-dir /Users/sen/ai/your-taste \
-  -p --no-session-persistence --dangerously-skip-permissions \
-  --permission-mode bypassPermissions \
-  "Your prompt here"
+./test-runner.sh L0 9              # bare Claude, Case 9
+./test-runner.sh L0-deep 9         # bare + extended thinking
+./test-runner.sh L1 9              # standalone CLAUDE.md (no plugin)
+./test-runner.sh L2 9              # full plugin
 ```
 
-### All 5 cases for one level
+### All 30 cases (batch)
 ```bash
-./run-all.sh L0    # Bare Claude
-./run-all.sh L2    # With your-taste
+./run-all.sh L2                    # serial, all 30 cases
+./run-all.sh L2 4                  # 4x parallel, all 30 cases
+./run-all.sh L2 1 2 19 27         # serial, specific cases only (retry)
 ```
 
-Results are saved to `results/` with filenames like `L0-case3-20260306-205055.md`.
-
-### Important: git reset between runs
-
-The script auto-resets via `git checkout -- .` between cases, so each case starts with clean source code.
-
-If running manually, always reset first:
+### Environment variables
 ```bash
-git checkout -- .
+CASE_TIMEOUT=180                   # per-case timeout (seconds, default 180)
+CLAUDE_BIN=claude                  # path to claude binary
+TASTE_PLUGIN_DIR=../your-taste     # path to plugin
 ```
 
-## The 5 Test Cases
+Results are saved to `results/` with filenames like `L0-case9-20260321-082734.md`.
 
-| Case | Prompt | What to look for |
-|------|--------|-----------------|
-| 1 | "Add date range filter to orders endpoint" | Does AI use Knex (actual) or Prisma (README claim)? |
-| 2 | "Migrate orders soft-delete to use deleted_at" | Does AI scan users.js and products.js too? |
-| 3 | "Increase rate limit to 500" | Does AI notice it's a dev default / wire env vars? |
-| 4 | "Fix: Widget Pro shows $2999 instead of $29.99" | Does AI fix at call site or change getOrderTotal contract? |
-| 5 | "Add CSV export for all orders" | Does AI consider scale (5000 rows) or just load all? |
+### Important notes
 
-Full pass/fail criteria are in `scenarios/01-*.md` through `scenarios/05-*.md`.
+- The script auto-resets via `git checkout -- .` between cases
+- L1 requires `~/.your-taste/standalone-CLAUDE.md` — run `taste export` first if base-thinking.md changed
+- Parallel mode copies project to temp dirs for isolation
 
-## Evaluating Results
+## Full Evaluation Protocol
 
-Read each output file and score against the scenario criteria:
+### Step 1: Run 3 rounds per level
 
+Single-run results have too much variance. Run each level 3 times for statistical reliability.
+
+```bash
+# Round 1
+./run-all.sh L0 4 && ./run-all.sh L0-deep 4 && ./run-all.sh L1 4 && ./run-all.sh L2 4
+
+# Round 2
+./run-all.sh L0 4 && ./run-all.sh L0-deep 4 && ./run-all.sh L1 4 && ./run-all.sh L2 4
+
+# Round 3
+./run-all.sh L0 4 && ./run-all.sh L0-deep 4 && ./run-all.sh L1 4 && ./run-all.sh L2 4
 ```
-Pass   = AI avoided the trap
-Fail   = AI fell into the trap
-Pass+  = Passed and showed additional reasoning depth
-Partial = Found the issue but fixed at wrong level
+
+Or run 2 levels in parallel (8 concurrent Claude instances):
+```bash
+./run-all.sh L0 4 & ./run-all.sh L0-deep 4 & wait
+./run-all.sh L1 4 & ./run-all.sh L2 4 & wait
 ```
+
+Timeouts: retry with `CASE_TIMEOUT=300 ./run-all.sh L1 1 5 9` (Case 5 CSV export often needs more time).
+
+### Step 2: Evaluate by category (not by level)
+
+**Critical**: assign one evaluator per **category**, not per level. This ensures consistent scoring standards across levels within each category.
+
+| Evaluator | Category | Cases | What to look for |
+|-----------|----------|-------|------------------|
+| Agent 1 | Breadth-scan | 2, 7, 9, 12, 16, 25 | Did AI scan adjacent files/components? |
+| Agent 2 | Verification | 6, 13, 20, 21 | Did AI verify claims/docs before acting? |
+| Agent 3 | Root Cause | 3, 4, 8, 14, 15, 22, 26 | Did AI trace to actual root cause? |
+| Agent 4 | Scope Control | 10, 17, 19, 24, 27 | Did AI stay in scope and flag breaking changes? |
+| Agent 5 | Feature Design | 1, 5, 11, 18, 23, 28 | Did AI consider edge cases, performance, patterns? |
+| Agent 6 | Generalization | 29, 30 | Did AI combine principles for novel situations? |
+
+Each agent reads:
+1. The scenario file (`scenarios/NN-*.md`) — contains pass/fail criteria
+2. ALL result files for that case across ALL levels and ALL 3 runs
+
+Each agent scores every result as PASS / PARTIAL / FAIL.
+
+**Why category-based**: If Agent A evaluates all L0 results and Agent B evaluates all L2 results, their different grading strictness makes L0-vs-L2 comparison unreliable. Category-based evaluation ensures the same agent grades L0, L1, L2 for the same case — apples-to-apples.
+
+### Step 3: Aggregate scores
+
+For each case × level, take the **majority score** across 3 runs:
+- 3× PASS = PASS
+- 2× PASS + 1× PARTIAL = PASS
+- 2× PARTIAL + 1× PASS = PARTIAL
+- etc.
+
+Report both the majority score and the individual run scores for transparency.
+
+## Scoring Standard
+
+Score strictly against each scenario's **Pass Criteria** and **Fail Criteria**:
+
+| Score | Meaning |
+|-------|---------|
+| **PASS** | Meets all pass criteria. AI performed the expected reasoning behavior. |
+| **PARTIAL** | Meets some pass criteria. Correct direction but incomplete (e.g., found 2/4 leaks). |
+| **FAIL** | Meets fail criteria or misses the core expected behavior entirely. |
+
+**Rules:**
+- Do NOT inflate scores for "awareness" — if the scenario says "must identify X" and AI didn't identify X, it's not PASS
+- "Mentioned it but didn't fix it" is PARTIAL at best, not PASS
+- Timeout = rerun with higher CASE_TIMEOUT; if still fails, score as FAIL
+
+## The 30 Test Cases
+
+Full pass/fail criteria are in `scenarios/01-*.md` through `scenarios/30-*.md`.
+
+| # | Name | Category | Core trap |
+|---|------|----------|-----------|
+| 1 | Category Filter | Feature | Migration exists but never applied |
+| 2 | Soft Delete Migration | Breadth | 3 entity types × 3 different soft-delete patterns |
+| 3 | Rate Limit Config | Root Cause | .env.example misleads, config is hardcoded |
+| 4 | Price Display Bug | Root Cause | cents/dollars mismatch |
+| 5 | CSV Export | Feature | "Loop through pages" vs direct DB query |
+| 6 | Misleading JSDoc | Verification | JSDoc lies about filtering |
+| 7 | Validation Breadth | Breadth | quantity=0 bug, check other endpoints |
+| 8 | Auth Middleware Bug | Root Cause | Middleware mounted but never enforces |
+| 9 | Memory Leaks (4) | Breadth | 4 leaks across different files |
+| 10 | Order Status Update | Scope | Add PATCH without over-engineering |
+| 11 | Stock Deduction | Feature | Needs transaction + race condition guard |
+| 12 | ID Type Validation | Breadth | Same bug in users/products routes |
+| 13 | Phantom Sort Feature | Verification | Sorting was never implemented |
+| 14 | Response Format | Root Cause | "Copy formatting" would propagate bug |
+| 15 | Env Config Mismatch | Root Cause | Env var not read, config hardcoded |
+| 16 | Error Handling Breadth | Breadth | Error handling needed across all routes |
+| 17 | PATCH Order Fields | Scope | Should question letting users set prices |
+| 18 | Add User to Orders | Feature | N+1 query trap |
+| 19 | Set deleted_at | Scope | 1-line fix, don't over-refactor |
+| 20 | Price Mismatch | Verification | Prices are correct (snapshot design) |
+| 21 | Stale User Cache | Verification | Stale cache, not a query bug |
+| 22 | Search Route Ordering | Root Cause | /:id matches before /search |
+| 23 | Bulk CSV Import | Feature | Error handling, partial failure |
+| 24 | Cancel/Refund | Scope | Design decisions needed first |
+| 25 | Pagination Count | Breadth | Count query diverges from data query |
+| 26 | Stale Price Cache | Root Cause | Cache not invalidated on update |
+| 27 | Rename ID Field | Scope | Breaking API change |
+| 28 | Stats Performance | Feature | 500k rows in memory |
+| 29 | Admin Impersonation | Generalization | Security risk, broken JWT |
+| 30 | Bulk Order Create | Generalization | Multi-dimensional design |
 
 ## Troubleshooting
 
-**"Cannot be launched inside another Claude Code session"**
-- The scripts unset `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT`. If running from terminal, this shouldn't happen. If running from inside Claude Code, the env vars are handled by the script.
+**Timeout on Case 5 (CSV export)**
+- Claude generates verbose code for streaming CSV. Try `CASE_TIMEOUT=300`.
+- If still fails, may be output token limit in claude-cli-proxy.
 
-**"claude: aliased to..."**
-- The scripts use the full path `/Users/sen/.local/bin/claude` to bypass the alias.
+**"Cannot be launched inside another Claude Code session"**
+- Scripts unset `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT`. Should work from terminal or inside Claude Code.
+
+**L1 standalone CLAUDE.md not found**
+- Run `taste export` CLI command or invoke the `taste:export` skill.
 
 **Different results each run**
-- LLM output is non-deterministic. Run 3x and take majority result for each case.
+- Expected — LLM output is non-deterministic. This is why we run 3x and take majority scores.

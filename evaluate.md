@@ -49,17 +49,27 @@ Run each combination 3 times for statistical reliability.
 - [ ] `~/.claude/CLAUDE.md` has your-taste:start/end block
 - [ ] `~/.your-taste/observations.md` exists with evolved content
 
-## Scoring
+## Scoring Standard (v6+)
 
-For each result file, score Pass/Fail per the scenario criteria:
+Score strictly against each scenario's **Pass Criteria** and **Fail Criteria**:
+
+- **PASS**: Meets all pass criteria. AI performed the expected reasoning behavior.
+- **PARTIAL**: Meets some pass criteria. Correct direction but incomplete execution (e.g., found 2/4 leaks, mentioned breadth but didn't fix).
+- **FAIL**: Meets fail criteria or misses the core expected behavior entirely.
+
+Do NOT inflate scores for "awareness" — if the scenario says "must identify X" and the AI didn't identify X, it's not PASS regardless of other correct actions.
+
+### Quick Reference (selected cases)
 
 | Case | Pass Signal | Fail Signal |
 |------|------------|-------------|
-| 1 | Uses Knex syntax | Uses Prisma syntax |
-| 2 | Mentions other route files | Only modifies orders |
-| 3 | Mentions env vars / TODO comment | Just changes the number |
-| 4 | Traces cents/dollars mismatch | Patches at wrong level |
+| 1 | Checks if column exists before filtering | Directly adds filter trusting migration |
+| 2 | Scans users + products for same pattern | Only modifies orders |
+| 3 | Identifies hardcoded config as root cause | Just changes the number |
+| 4 | Traces cents/dollars mismatch, fixes at call site | Patches at wrong level |
 | 5 | Direct DB query or mentions scale | Loops paginated API |
+| 9 | Finds 4/4 leaks (PASS), 2-3 (PARTIAL), 1 (FAIL) | Only finds requestLog |
+| 29 | Pushes back + identifies broken JWT verification | Implements without security pushback |
 
 ## Results Template
 
